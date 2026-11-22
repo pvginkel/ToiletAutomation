@@ -38,6 +38,8 @@ export function createEngine({ serial, context, toPage }) {
   let port = null;
   let portState = 'none'; // none | closed | open | lost
   let tLost = null;
+  let lastConnect = null; // { ts, port } of the latest connect event
+  let opening = null; // the monitor's open in progress
   let monitor = null; // { reader, done: Promise, stopping }
   let job = null;
   let hidden = false;
@@ -149,6 +151,7 @@ export function createEngine({ serial, context, toPage }) {
       const backMs = tLost ? Date.now() - tLost : null;
       event('port_connect', { sameObject, info: p.getInfo(), msSinceLost: backMs, connected: p.connected });
       if (port && !sameObject && !samePortInfo(p, port)) return;
+      lastConnect = { ts: Date.now(), port: p };
       if (tLost) setFinding('sameObjectOnReturn', sameObject);
       for (const w of backWaiters) w({ port: p, how: 'connect event' });
       if (!job) {
@@ -171,6 +174,9 @@ export function createEngine({ serial, context, toPage }) {
   // Waits for the port to come back after a loss: the connect event, or getPorts() polled
   // in case the event never fires.
   function waitBack(timeoutMs) {
+    if (lastConnect && tLost && lastConnect.ts >= tLost) {
+      return Promise.resolve({ port: lastConnect.port, how: 'connect event (before the wait)' });
+    }
     return new Promise((resolve) => {
       let finished = false;
       const done = (v) => {
@@ -206,7 +212,12 @@ export function createEngine({ serial, context, toPage }) {
     return port;
   }
 
-  async function openMonitor(reason) {
+  function openMonitor(reason) {
+    if (!opening) opening = doOpenMonitor(reason).finally(() => { opening = null; });
+    return opening;
+  }
+
+  async function doOpenMonitor(reason) {
     if (!serial) return;
     if (monitor) return;
     if (!port && !(await pickUp(reason))) return;
@@ -259,6 +270,8 @@ export function createEngine({ serial, context, toPage }) {
           }
         } catch (e) {
           if (!m.stopping) event('read_error', errInfo(e));
+          // After these the port hands out a new readable; anything else ends the loop
+          if (['BufferOverrunError', 'FramingError', 'BreakError', 'ParityError'].includes(e?.name)) continue;
           break;
         } finally {
           m.reader.releaseLock();
@@ -320,33 +333,44 @@ export function createEngine({ serial, context, toPage }) {
   // Connects esptool-js, through the reset into download mode. When that reset drops the
   // port, it waits for the port to come back and connects without a reset.
   async function connectLoader(r) {
-    let transport = new Transport(port, false);
-    let loader = makeLoader(transport);
     const t0 = Date.now();
-    try {
-      await loader.main('default_reset');
-      r.connectPath = 'default_reset';
-      setFinding('portDroppedOnConnectReset', portState === 'lost' && tLost >= t0);
-    } catch (e) {
-      event('main_failed', errInfo(e));
-      const lost = portState === 'lost' && tLost >= t0;
-      setFinding('portDroppedOnConnectReset', lost);
-      if (!lost) throw e;
-      try { await transport.disconnect(); } catch {}
-      try { await port.close(); } catch {}
-      const back = await waitBack(20000);
-      if (!back) {
-        setFinding('backWithoutClick', false);
-        throw new Error('the port did not come back after the download-mode reset');
-      }
-      event('reenumerated', { phase: 'connect', ms: Date.now() - tLost, how: back.how });
-      setFinding('reenumerationMs', Date.now() - tLost);
-      port = back.port;
+    const ladder = ['default_reset', 'no_reset', 'default_reset'];
+    const path = [];
+    let transport, loader;
+    for (let i = 0; ; i++) {
+      const mode = ladder[i];
+      const ti = Date.now();
       transport = new Transport(port, false);
       loader = makeLoader(transport);
-      await loader.main('no_reset');
-      r.connectPath = 'no_reset after re-enumeration';
+      try {
+        await loader.main(mode);
+        path.push(mode);
+        if (i === 0) setFinding('portDroppedOnConnectReset', portState === 'lost' && tLost >= ti);
+        break;
+      } catch (e) {
+        const lost = portState === 'lost' && tLost >= ti;
+        path.push(`${mode} failed${lost ? ' (port dropped)' : ''}`);
+        event('main_failed', { mode, lost, ...errInfo(e) });
+        if (i === 0) setFinding('portDroppedOnConnectReset', lost);
+        try { await transport.disconnect(); } catch {}
+        try { await port.close(); } catch {}
+        if (!lost || i === ladder.length - 1) {
+          r.connectPath = path.join(' → ');
+          throw e;
+        }
+        const lostAt = tLost;
+        const back = await waitBack(20000);
+        if (!back) {
+          setFinding('backWithoutClick', false);
+          throw new Error('the port did not come back after the reset into download mode');
+        }
+        event('reenumerated', { phase: 'connect', ms: Date.now() - lostAt, how: back.how });
+        setFinding('reenumerationMs', Date.now() - lostAt);
+        port = back.port;
+        await sleep(300);
+      }
     }
+    r.connectPath = path.join(' → ');
     setFinding('downloadModeEntered', true);
     setFinding('connectPath', r.connectPath);
     r.chip = loader.chip.CHIP_NAME;
@@ -411,11 +435,23 @@ export function createEngine({ serial, context, toPage }) {
     await openMonitor('after job');
   }
 
+  function refuse(j, error) {
+    event('job_refused', { kind: j.kind, fw: j.fw, error });
+    return { ok: false, error };
+  }
+
   async function runJob(j) {
-    if (job) return { ok: false, error: 'busy' };
-    if (!serial) return { ok: false, error: 'no Web Serial in this context' };
-    if (!port && !(await pickUp('job'))) return { ok: false, error: 'port not open' };
-    if (portState === 'lost') return { ok: false, error: 'port not open (lost)' };
+    if (job) return refuse(j, 'busy');
+    if (!serial) return refuse(j, 'no Web Serial in this context');
+    if (!port && !(await pickUp('job'))) return refuse(j, 'port not open');
+    if (portState === 'lost') {
+      // A firmware that reboots drops the port for a moment; give it time to come back
+      const back = await waitBack(10000);
+      if (!back) return refuse(j, 'port not open (lost)');
+      await sleep(300);
+    }
+    if (opening) await opening.catch(() => {});
+    if (job) return refuse(j, 'busy');
     job = j;
     status();
     const r = { kind: j.kind, fw: j.fw, hidden };

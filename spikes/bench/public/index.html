@@ -79,6 +79,7 @@ function onEngine(msg) {
     tb.insertBefore(tr, tb.firstChild);
     while (tb.rows.length > 400) tb.deleteRow(-1);
     if (kind === 'job_end') $('#progress').textContent = msg.ok ? ' — job done' : ` — job failed: ${msg.error}`;
+    if (kind === 'job_refused') $('#progress').textContent = ` — refused: ${msg.error}`;
   } else if (msg.t === 'progress') {
     $('#progress').textContent = ` — ${msg.file}: ${Math.floor((100 * msg.written) / msg.total)}%`;
   }

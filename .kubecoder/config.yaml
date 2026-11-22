@@ -7,6 +7,7 @@ capabilities:
 services: []
 tools:
   - use: esp-idf
+  - use: frontend
 imageBuilder: false
 env: []
 secrets: {}
