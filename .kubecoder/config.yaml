@@ -1,24 +1,10 @@
-repos: []
-cwd: ToiletAutomation
 capabilities:
   github: rw
-  fleetAdmin: false
-  capacityExempt: false
-services: []
 tools:
   - use: esp-idf
   - use: frontend
-imageBuilder: false
-env: []
-secrets: {}
-secretFiles: []
-packages: []
-setup: []
-preamble:
-  instructions: ''
 ports:
   - name: bench
     port: 3520
     type: http
     sslOffload: true
-homeOverlays: []
