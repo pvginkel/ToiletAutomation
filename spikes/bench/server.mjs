@@ -14,7 +14,7 @@ const PAGE_PORT = Number(process.env.BENCH_PAGE_PORT || 3520);
 const CTL_PORT = Number(process.env.BENCH_CTL_PORT || 3521);
 const PING_S = Number(process.env.BENCH_PING_S || 20);
 const S2_HIDDEN_S = Number(process.env.BENCH_S2_HIDDEN_S || 330);
-const RUN = path.join(HERE, 'run');
+const RUN = process.env.BENCH_RUN || path.join(HERE, 'run');
 const BUILD = path.join(HERE, 'build');
 fs.mkdirSync(RUN, { recursive: true });
 
@@ -55,6 +55,7 @@ function sendFile(res, file, type) {
 
 const page = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/favicon.ico') return res.writeHead(204).end();
   const s = STATIC[url.pathname];
   if (s) return sendFile(res, path.join(HERE, s[0]), s[1]);
   const m = url.pathname.match(/^\/fw\/([A-Za-z0-9_-]+)\/(.+)$/);

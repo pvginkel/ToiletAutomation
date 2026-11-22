@@ -23,7 +23,7 @@ export function createEngine({ serial, context, toPage }) {
     esptoolDefaultHardResetWorks: null,
     rtsPulseHardResetWorks: null,
     backWithoutClick: null,
-    sameObjectOnReturn: null,
+    sameObjectOnReturn: [],
     reenumerationMs: [],
     panicCaptured: null,
     bootCountGaps: null,
@@ -59,7 +59,7 @@ export function createEngine({ serial, context, toPage }) {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
   }
   function event(kind, data = {}) {
-    const ev = { t: 'event', ts: Date.now(), kind, hidden, ...data };
+    const ev = { t: 'event', ts: Date.now(), hidden, ...data, kind };
     toPage(ev);
     send(ev);
   }
@@ -436,7 +436,7 @@ export function createEngine({ serial, context, toPage }) {
   }
 
   function refuse(j, error) {
-    event('job_refused', { kind: j.kind, fw: j.fw, error });
+    event('job_refused', { job: j.kind, fw: j.fw, error });
     return { ok: false, error };
   }
 
@@ -454,9 +454,9 @@ export function createEngine({ serial, context, toPage }) {
     if (job) return refuse(j, 'busy');
     job = j;
     status();
-    const r = { kind: j.kind, fw: j.fw, hidden };
+    const r = { job: j.kind, fw: j.fw, hidden };
     const t0 = Date.now();
-    event('job_start', { kind: j.kind, fw: j.fw, reset: j.reset });
+    event('job_start', { job: j.kind, fw: j.fw, reset: j.reset });
     let transport = null;
     try {
       if (j.kind === 'reset') {
