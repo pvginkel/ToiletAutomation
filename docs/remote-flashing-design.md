@@ -400,10 +400,41 @@ needed beyond something to serve the page and echo a WebSocket.
 
   This decides whether R4 is achievable. If the grant does not survive, the fallback is the
   desktop helper as the holder (§4 A3).
+
+  **Answered 2026-11-22: R4 holds, and the page stays the holder.** These results are from
+  `spikes/bench`, on the S3-Tiny (VID 0x303A, PID 0x1001) in Chrome 158 on Windows:
+  - Web Serial works in a dedicated worker. The page asks for the port and the worker picks it
+    up through `getPorts()`.
+  - `main('default_reset')` enters download mode with the USB-JTAG sequence, and the port does
+    **not** drop. Connecting takes about 0.8 s, and writing the 185 KB of `hello_world` about
+    2.5 s.
+  - **esptool-js 0.7.1's own hard reset still resets nothing**: `after('hard_reset')` only
+    releases RTS. IoT Support's pulse (RTS on, 100 ms, RTS off) resets the chip, so the
+    workaround stays (§3.3).
+  - An RTS reset, `esp_restart()` and a panic's reboot do **not** re-enumerate USB on this
+    machine. The whole boot log is captured, ROM lines included, and so is every abort and
+    backtrace, with no boot missing. §3.1's "every reset drops the port" does not hold here.
+  - The RESET button and unplugging do drop the port. It comes back as a **new** `SerialPort`
+    object with the grant intact, and `open()` works without a click. It is back 0.6 s after
+    the button, and 6.4 s after an unplug, including the operator's wait of about 5 s.
+  - One thing the bench has to handle: after the reset that ends a flash, esptool-js still
+    holds the port, so the first boot's output lands in its `Transport` buffer and never reaches
+    the log. The bench passes that buffer on to the log before it reopens the monitor.
 - **S2. A hidden tab.** With the serial work in a dedicated worker, flash after the tab has been
   in the background for more than 5 minutes. The worker is the design, so this confirms it.
+
+  **Answered 2026-11-22: confirmed.** The tab was hidden behind a pile of other tabs, and the
+  server sent a flash after 332 s. It took the same time as in a visible tab: 0.9 s to connect,
+  2.3 s to write, 9.4 s in all. The page was not unloaded, and its WebSocket stayed up. While
+  hidden, the worker's 200 ms timer ran at most 20 ms late, and the page's ran 59 s late,
+  which is Chrome's intensive throttling.
 - **S3. The edge.** A WebSocket through an `sslOffload` port: does it upgrade, and what is the idle
   timeout? That sets the ping interval.
+
+  **Answered 2026-11-22.** It upgrades, from the pod and from the operator's desktop alike. A
+  socket that carries nothing is cut after exactly 120 s (close code 1006), which is the
+  nginx read timeout of §3.4. The bench pings every 20 s. KubeCoder also accepts a `ports:`
+  entry that no container declares, so it does not check the number (plan §1).
 - **S4. Answered.** A repo `ports:` entry with `sslOffload` fronts a port the service sidecar
   listens on (§3.4). The first deployment of the bench is what proves it.
 - **S5. Optional reading.** esp-serial-relay's handling of the port coming back after a reset is
