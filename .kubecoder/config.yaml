@@ -1,5 +1,7 @@
 repos:
   - url: https://github.com/pvginkel/FirmwareBench
+services:
+  - bench
 capabilities:
   github: rw
 tools:
