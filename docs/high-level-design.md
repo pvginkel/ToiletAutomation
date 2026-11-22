@@ -228,7 +228,8 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 
 ## 11. Order of work
 
-1. **The remote bench.** First the spike on this board, then the design session, then the build.
+1. **The remote bench.** First the spikes on this board, then the build in a repo of its own
+   ([remote-flashing-plan.md](remote-flashing-plan.md)).
 2. **The skeleton.** The `.kubecoder` config (`esp-idf`, `native`, `esp-libs` shared),
    `project.yaml`, CMake, partitions, the esp-mdm `Application`, the console, the Jenkinsfile and
    the IoT Support model. It boots to ready on the bench, with logs read by the agent.

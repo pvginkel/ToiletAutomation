@@ -1,38 +1,41 @@
-# Remote flashing and device logs: research and options
+# Remote flashing and device logs: design
 
 The problem: an agent in a KubeCoder environment builds firmware, and the device it runs on is
 plugged into the operator's desktop. The goal is that the agent flashes a build and reads the
 device's logs without the operator doing anything per build. The operator opens one page once,
 connects the port, and leaves it connected.
 
-Status: research and options, 2026-11-22. The design is bottomed out in a separate session, and
-§10 lists the decisions it takes. Facts carry their source, and anything not verified is marked
-**unverified**. §9 lists what a spike on the real board has to settle first.
+Status: decided, 2026-11-22. §1 is the design, and §10 records each decision. The options that
+lost stay in §4 to §6 as the record of why. Facts carry their source, and anything not verified is
+marked **unverified**. §9 lists the spikes that still have to run on the real board. The order of
+the build is in [remote-flashing-plan.md](remote-flashing-plan.md).
+
+This document covers the sidecar only. The one firmware-side question it raises, keeping a dev
+build on the device (D7), is left to the firmware work.
 
 Working name for the thing: **the bench**.
 
-## 1. Where this is leaning
+## 1. The design
 
-The leaning is a **KubeCoder catalog service**, a long-running sidecar of its own. It is not a
-toolchain. It serves two things:
+The bench is a **KubeCoder catalog service**: a long-running sidecar of its own, built in its own
+repository. It is not a toolchain. It has three parts:
 
-- **The page.** It is served on an `sslOffload` port. The operator opens it in Chrome or Edge,
-  picks the COM port once, and leaves the tab open.
+- **The page.** The operator opens it in Chrome or Edge, picks the COM port once, and leaves the
+  tab open.
   - The page holds the port and runs **esptool-js** itself for every flash. The reset sequence is
     the one thing that cannot cross a network reliably, so it stays local.
   - Between flashes the page streams every byte the device prints to the server.
-- **The agent API.** It is on `127.0.0.1` only, so it is unreachable through the edge.
-  - `POST /flash` takes a build directory. With `mountWork` the service reads `flasher_args.json`
-    from `/work` itself, so nothing is uploaded. The call blocks until the device is flashed and
-    answers with the result.
-  - `GET /log` (cursor, follow, wait-for-pattern), `POST /reset` and `POST /console`.
-  - The log is also written to a file the agent can grep.
-- **Decoding happens agent-side.** Backtrace and coredump decoding runs in the `esp-idf`
-  toolchain against the build's ELF, so the service stays lean.
-- **Network logs are already available.** Once the firmware is on WiFi, esp-mdm ships logs to
-  Elasticsearch, which the agent can already query.
+  - It keeps one WebSocket to the server, which carries jobs one way and results and log bytes
+    the other.
+- **The agent API.** It listens on `127.0.0.1` only, so it is unreachable through the ingress.
+  - `POST /flash` takes a build directory. The service mounts `/work`, so it reads
+    `flasher_args.json` and the images in place and nothing is copied or uploaded. The call
+    blocks until the device is flashed and answers with the result.
+  - `GET /status`, `GET /log` (cursor, wait-for-pattern), `POST /reset` and `POST /console`.
+- **The log file.** Every line the device prints is written, timestamped, to
+  `/work/.bench/serial.log`. The agent reads it with grep and tail. `GET /log` exists for the one
+  thing a file cannot do, which is to block until a pattern appears.
 
-So: curl, yes, but against localhost, and pointing at a build directory rather than pushing bytes.
 The whole agent-side flow is two calls:
 
 ```
@@ -40,11 +43,28 @@ curl -s localhost:<api>/flash -d '{"build_dir":"/work/ToiletAutomation/build"}'
 curl -s 'localhost:<api>/log?since=<cursor>&wait=Ready&timeout=30'
 ```
 
-The alternatives that were weighed:
+Three rules shape the build:
 
-- **A dumb browser pipe plus RFC2217.** This keeps `idf.py flash monitor` unchanged but sends
-  resets across the network (§4 A2).
-- **A desktop helper instead of a browser.** It is more robust but has to be installed (§4 A3).
+- **The agent API does not know a browser holds the port.** The messages between the page and the
+  server are a contract of their own: a holder connects, takes jobs, and reports results and log
+  bytes. The page is the first holder. A headless helper on the desktop that dials out to the
+  server could replace it later without any change for agents (§4 A3).
+- **The serial work runs in a dedicated worker.** A hidden tab's timers are throttled, and a
+  worker's are not expected to be (§3.2). The page itself only shows status and asks for the port.
+- **Decoding happens agent-side.** Backtrace and coredump decoding runs in the `esp-idf` toolchain
+  against the build's ELF, so the service carries no toolchain.
+
+Once the firmware is on WiFi, esp-mdm also ships its logs to Elasticsearch, which the agent can
+already query. The bench does not touch that path.
+
+The alternatives that were weighed and lost:
+
+- **A dumb browser pipe plus RFC2217.** It keeps `idf.py flash monitor` unchanged, but it sends
+  the reset sequence and the re-enumeration across the network (§4 A2).
+- **A desktop helper instead of a browser.** It is more robust, because it does not depend on an
+  open tab, but it has to be installed. It stays available as a later holder (§4 A3).
+- **One central bench for every environment.** It saves a tab per project and costs
+  authentication, routing and uploads (§5).
 - **OTA from the pod.** It takes the browser out of routine flashes, but needs firmware and LAN
   support (§4 A4). It is a later complement to the bench, not a replacement.
 
@@ -111,8 +131,10 @@ Mozilla Hacks.
   - Timer throttling still applies to hidden tabs: up to 1 s granularity, and once a minute after
     5 minutes hidden under chained timers. The `setTimeout` waits in a reset sequence could
     stretch.
-  - Mitigations are a visible window, or running the serial work in a dedicated worker
-    (`WorkerNavigator.serial` exists). Both are part of spike S2.
+  - The design runs the serial work in a dedicated worker (`WorkerNavigator.serial` exists).
+    Worker timers are not expected to be throttled with the tab, which is **unverified** and is
+    spike S2. `requestPort()` is not available in a worker, so the page asks for the port and the
+    worker picks it up through `getPorts()`.
 - **Browsers.** Chrome and Edge 89+. Firefox desktop since 151 (May 2026). Not Safari.
 
 ### 3.3 esptool-js, and what IoT Support already does
@@ -157,11 +179,22 @@ From the `config.yaml` and `controller.yaml` references.
   - Pilot's `pilot-sync` is the precedent: an estate image, `mountWork`, a localhost HTTP API,
     and `instructions` telling the agent how to call it.
 - **HTTPS comes from the repo's `ports:`.** A `ports:` entry with `sslOffload: true` is served at
-  `https://<name>.<env-id>.<suffix>`, with TLS at the edge. A service's own `expose:` has no
-  `sslOffload`.
-  - Containers in a pod share one network namespace, so a repo `ports:` entry should be able to
-    front a port the service listens on. This is **unverified** (spike S4). If it does not work,
-    the alternative is a catalog-level offload for service ports, which is a KubeCoder change.
+  `https://<name>.<env-id>.home`, with TLS at the edge. The other way to publish a service's port,
+  `expose:` on the repo's `services:` entry, is plain HTTP on `http://<env-id>.home:<port>` and
+  has no `sslOffload`, so Web Serial cannot use it.
+  - **The repo that selects the bench declares the page's port.** KubeCoder creates a Kubernetes
+    Service for the entry and the NGINX ingress offloads TLS in front of it. A Service routes to
+    a port on the pod, not on one container, so it reaches the sidecar. This is the operator's
+    answer to spike S4 (2026-11-22). It has not been tried.
+  - It puts three requirements on the bench:
+    - The page port listens on all interfaces. The agent API stays on `127.0.0.1`, on a second
+      port, which is what keeps it off the ingress.
+    - The page port is a fixed number set in the catalog entry, because the containers of a pod
+      share one port space.
+    - Each firmware repo adds two things: the service under `services:`, by its bare name and
+      without `expose:`, and the matching `ports:` entry. The manual refuses two ports that
+      resolve to the same Service port, so the port is declared once. The catalog entry's
+      `instructions` give the exact entry.
 - **The edge.** It is the `nginx-configurator` template in DockerImages.
   - Non-public sites allow only private address ranges, and there is no authentication.
   - The estate's proxy snippet forwards the WebSocket `Upgrade` and `Connection` headers.
@@ -197,7 +230,7 @@ through `kc env describe`.
 
 This is the core choice.
 
-### A1. The browser flashes, and the server hands it jobs (leaning)
+### A1. The browser flashes, and the server hands it jobs (chosen)
 
 The page runs esptool-js. The server queues a flash job. The page fetches the images, flashes,
 hard-resets, reopens the port and resumes the monitor, then reports the result. The agent's
@@ -277,10 +310,10 @@ log sink in the service.
 
 ## 5. Option set B: how it is packaged in KubeCoder
 
-1. **Catalog service (leaning).** It is defined in KubeCoderDeploy's chart values like
+1. **Catalog service (chosen).** It is defined in KubeCoderDeploy's chart values like
    `pilot-sync`, from an image built by Jenkins.
    - Repos select it with `services: [<bench>]` plus one `ports:` entry with `sslOffload: true`.
-   - `mountWork` gives it the build directories. `dataPath` keeps the log across restarts.
+   - `mountWork` gives it the build directories and a place under `/work` for the log.
    - It is supervised, the same in every firmware environment, and documented through
      `instructions`.
 2. **Inline tool in this repo.** Fastest to prototype, with no KubeCoder change. The server is
@@ -296,8 +329,10 @@ log sink in the service.
      - It couples dev tooling to the production MDM.
      - It loses per-environment isolation.
 
-Where the code lives under option 1: a repo of its own for the server and page, its image in the
-estate's pipeline, and the catalog entry in KubeCoderDeploy.
+Where the code lives: a repo of its own for the server and page, its image in the estate's
+pipeline, and the catalog entry in KubeCoderDeploy. The bench is built, tested and deployed before
+the firmware work starts. After that its repo leaves this environment, and only the catalog
+service stays.
 
 ## 6. Option set C: the agent's interface
 
@@ -351,48 +386,59 @@ estate's pipeline, and the catalog entry in KubeCoderDeploy.
 - **Further options.** No auth (homelab), a per-environment token in the page URL, or Keycloak in
   front.
 
-## 9. Spikes before the design session
+## 9. Spikes before the build
 
-These can be run from a throwaway page plus the operator for ten minutes. No server is needed.
+S1 to S3 run from a throwaway page in this repo, plus the operator for ten minutes. No server is
+needed beyond something to serve the page and echo a WebSocket.
 
 - **S1. Reset and re-enumeration on the real S3-Tiny.** With esptool-js 0.7.1 over Web Serial:
   - Does `main()` enter download mode with the USB-JTAG sequence?
   - Does the port drop on that reset, and on the hard reset after flashing?
   - Does `getPorts()` hand it back with the grant intact, and does `open()` work without a click?
   - How long does it take on the operator's Windows machine?
+  - Is the output of a firmware that panics and reboots captured, or lost in the re-enumeration?
 
-  This decides whether R4 is achievable.
-- **S2. A hidden tab.** Flash after the tab has been in the background for more than 5 minutes.
-  Repeat with the serial work in a dedicated worker.
+  This decides whether R4 is achievable. If the grant does not survive, the fallback is the
+  desktop helper as the holder (§4 A3).
+- **S2. A hidden tab.** With the serial work in a dedicated worker, flash after the tab has been
+  in the background for more than 5 minutes. The worker is the design, so this confirms it.
 - **S3. The edge.** A WebSocket through an `sslOffload` port: does it upgrade, and what is the idle
-  timeout?
-- **S4. KubeCoder.** Can a repo `ports:` entry with `sslOffload` front a port served by a service
-  sidecar, or only one in the dev or tool containers?
-- **S5. Optional.** Read esp-serial-relay. Does its forced `usb_reset` over RFC2217 actually work
-  on an S3? That decides whether A2 stays on the table.
+  timeout? That sets the ping interval.
+- **S4. Answered.** A repo `ports:` entry with `sslOffload` fronts a port the service sidecar
+  listens on (§3.4). The first deployment of the bench is what proves it.
+- **S5. Optional reading.** esp-serial-relay's handling of the port coming back after a reset is
+  worth reading before writing the page's reconnect. It no longer decides anything, because the
+  RFC2217 pipe (A2) is not being built.
 
-## 10. Decisions for the design session
+## 10. Decisions
 
-- **D1. Where the serial protocol runs.** A1, A2 or A3 (§4). Leaning A1.
-- **D2. Packaging.** A catalog service, or a prototype as an inline tool first. Per environment or
-  central (§5). Leaning: catalog service, per environment.
-- **D3. Build handover.** By path through `mountWork`, by upload, or both (§6).
-- **D4. Agent interface.** curl and an API documented in `instructions`, or a CLI, and where the
-  CLI lives (§6).
-- **D5. Page-to-server transport.** WebSocket or SSE plus POST (§7).
-- **D6. Log retention.** Size and location (`dataPath` or a file under the repo's build
-  directory), and whether the service also pulls the device's network logs.
-- **D7. Keeping a dev build on the device.** Options:
+Taken on 2026-11-22. D7 is the firmware's and stays open.
+
+- **D1. Where the serial protocol runs.** In the browser: A1 (§4). The page-to-server messages
+  are a contract of their own, so another holder can replace the page later.
+- **D2. Packaging.** A catalog service, one per environment, in a repo of its own (§5).
+- **D3. Build handover.** By path through `mountWork`. No upload.
+- **D4. Agent interface.** curl against the localhost API, documented in the catalog entry's
+  `instructions`. No CLI.
+- **D5. Page-to-server transport.** One WebSocket, with a ping inside the edge's idle timeout.
+- **D6. Log retention.** `/work/.bench/serial.log`, rotated by size, a few files of a few MB.
+  - It is under `/work`, so the agent reads it directly and it survives a restart. `dataPath` is
+    not used.
+  - It is outside every repo's tree, so it never shows up in a `git status`.
+  - The bench does not pull the device's network logs. Those are in Elasticsearch already.
+- **D7. Keeping a dev build on the device.** Open, and not the sidecar's. The options:
   - The bench device's `enableOTA: false` in IoT Support. This needs no code, but the operator
     must remember to flip it back.
   - An esp-mdm Kconfig that skips OTA in dev builds. That needs a dev/release build split.
   - A per-device pinned version in IoT Support. That is a feature there.
-- **D8. Scope of v1.** Flash, log and reset only, or console input too. Whether A4 (network OTA)
-  is planned now or later. Whether NVS provisioning ever moves into the bench (today it is IoT
-  Support's).
-- **D9. Security.** None, a URL token, or Keycloak (§8).
-- **D10. Multiple devices.** One port per environment, or several (Intercom has two hardware
-  versions).
+- **D8. Scope of v1.** Flash, log, reset and console input. Not in v1:
+  - network OTA (A4);
+  - NVS provisioning, which stays IoT Support's;
+  - reading a coredump out of flash;
+  - a guard on the device's MAC. `/status` reports the MAC, and the chip check stays.
+- **D9. Security.** No login. The server accepts one page session at a time, and only the
+  localhost API can start a flash (§8).
+- **D10. Multiple devices.** One port per environment.
 
 ## Sources
 
@@ -422,3 +468,5 @@ These can be run from a throwaway page plus the operator for ten minutes. No ser
   - KubeCoderDeploy: `chart/values.yaml` (the `pilot-sync` and `esp-idf` entries).
   - DockerImages: `nginx-configurator/app/template.j2`.
   - KubeCoder manual: the `config.yaml` and `controller.yaml` references.
+  - PilotApp: `sidecar/Dockerfile` and the root `Jenkinsfile`, for how `pilot-sync`'s image is
+    built.
