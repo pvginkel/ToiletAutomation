@@ -1,12 +1,9 @@
-repos:
-  - url: https://github.com/pvginkel/FirmwareBench
 services:
   - bench
 capabilities:
   github: rw
 tools:
   - use: esp-idf
-  - use: frontend
 ports:
   - name: bench
     port: 3520
