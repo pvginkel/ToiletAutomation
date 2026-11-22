@@ -7,7 +7,7 @@ MQTT, the same way it sees the other devices. ESP-IDF 5.5.3, C++20.
 
 Status: first draft, 2026-11-22. The hardware is the schematic at `51c1611`, before the relay was
 added. How the device is flashed and tested from a KubeCoder environment is in
-[remote-flashing-design.md](remote-flashing-design.md), and that work comes first.
+[remote-flashing-design.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-design.md), and that work comes first.
 
 ## 1. The decisions
 
@@ -191,7 +191,7 @@ cannot break SonosDisplay or Intercom.
 |---|---|---|
 | Host tests | presence, fan and jitter-buffer logic, config parsing | `kc project test` on the `native` toolchain; `esp-audio-support` carries its own host tests for the mixer |
 | Build and lint | it compiles, fits the slot, is formatted | `kc project build` (`esp-idf`), `kc project lint` |
-| On-device, agent-driven | it boots, connects, reaches ready, and the logic does what it should on the real chip | the remote bench: flash, read the serial log, reset, send console commands ([remote-flashing-design.md](remote-flashing-design.md)); after boot also the esp-mdm log stream in Elasticsearch |
+| On-device, agent-driven | it boots, connects, reaches ready, and the logic does what it should on the real chip | the remote bench: flash, read the serial log, reset, send console commands ([remote-flashing-design.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-design.md)); after boot also the esp-mdm log stream in Elasticsearch |
 | On-device, operator | sound, PIR coverage, the fan actually switching | the operator, after the agent's checks pass |
 
 The agent-driven layer needs two things built into the firmware:
@@ -229,7 +229,7 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 ## 11. Order of work
 
 1. **The remote bench.** First the spikes on this board, then the build in a repo of its own
-   ([remote-flashing-plan.md](remote-flashing-plan.md)).
+   ([remote-flashing-plan.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-plan.md)).
 2. **The skeleton.** The `.kubecoder` config (`esp-idf`, `native`, `esp-libs` shared),
    `project.yaml`, CMake, partitions, the esp-mdm `Application`, the console, the Jenkinsfile and
    the IoT Support model. It boots to ready on the bench, with logs read by the agent.
