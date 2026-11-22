@@ -13,8 +13,9 @@ IntercomClient is a new Android app whose only feature is managing the tracks. T
 is in [high-level-design.md](high-level-design.md), and this design answers that document's
 question of what sends the music.
 
-Status: second draft, 2026-11-22. It replaces the first draft of the same day, which had a
-separate Python server (ToiletAutomationServer) and its own app. Nothing is built yet.
+Status: settled, 2026-11-22, with no open questions. It replaces the first draft of the same
+day, which had a separate Python server (ToiletAutomationServer) and its own app. Nothing is
+built yet.
 
 ## 1. The decisions
 
@@ -41,6 +42,9 @@ separate Python server (ToiletAutomationServer) and its own app. Nothing is buil
 8. **IntercomServer serves the app's updates.** It uses MyDownloadsServer's two-call `/updates`
    contract, and Jenkins publishes each APK with a service account.
 9. **IntercomClient is developed in the IntercomServer environment** (§4.7).
+10. **The API is internal only, at `intercom.home`.** The phone has to be on the home network or
+    the VPN to manage tracks or update the app. A public host is a question for the intercom
+    client, if that design is ever reviewed.
 
 ## 2. System context
 
@@ -106,11 +110,21 @@ A visit, end to end:
 - **The project.** `IntercomServer.Tests` (xUnit) joins the solution. `kc project test` runs
   `cexec dotnet dotnet test IntercomServer.Tests/IntercomServer.Tests.csproj`, and Jenkins
   `Firmware/IntercomServer` gains a test stage before the image build.
+- **FFmpeg for the tests.** `project.yaml`'s setup step installs it into the `dotnet` sidecar,
+  through the passwordless `sudo` for apt that the toolchain images grant:
+
+  ```yaml
+  setup: >-
+    cexec dotnet sh -c 'sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg'
+    && cexec dotnet dotnet restore IntercomServer/IntercomServer.csproj
+  ```
+
+  The Jenkins test stage installs it into its container the same way.
 - **Real systems, no fakes:**
   - an MQTTnet broker started in the test process (MQTTnet ships a server);
   - a UDP listener on localhost that receives what the server sends;
   - a temporary directory standing in for `/data`;
-  - the real FFmpeg (Q2);
+  - the real FFmpeg;
   - tokens signed by a key the tests make, with the server pointed at it as its issuer.
 - **First, today's behaviour, pinned before it changes:**
   - device discovery from `configuration` and `state`;
@@ -284,7 +298,7 @@ still update itself out of the problem.
 ### 3.10 Deployment, in IntercomDeploy
 
 - **The image** is `dotnet/aspnet:9.0` with `ffmpeg` from apt.
-- **The ingress** is `intercom.home`, internal, with a step-ca certificate (Q1).
+- **The ingress** is `intercom.home`, internal, with a step-ca certificate (decision 10).
 - **Keycloak.** IntercomDeploy's Terraform already declares the Keycloak provider. It takes
   IotDeploy's `keycloak-client` module and three clients:
   - `intercom-server` holds the client roles `user` and `pipeline`, and is the audience the
@@ -323,6 +337,9 @@ username and password rather than Keycloak, and it has no media code.
 - Media3 ExoPlayer for playback, MediaRecorder for recording, and AppAuth for sign-in.
 - minSdk 26 and targetSdk 35.
 - The application id is `org.webathome.intercom`.
+- **The step-ca root.** `intercom.home` has a step-ca certificate, and Android ignores
+  user-installed CAs. So the app bundles the step-ca root, and its network security config
+  trusts it for `intercom.home` only. Keycloak keeps its public certificate.
 
 ### 4.3 The screen
 
@@ -382,8 +399,9 @@ permission is asked on the first recording.
 ### 4.7 The environment
 
 IntercomClient is developed in the IntercomServer environment. IntercomServer's
-`.kubecoder/config.yaml` gains `repos: [IntercomClient]` and the `android` toolchain. An agent
-then changes the API and its client in one session.
+`.kubecoder/config.yaml` gains `repos: [IntercomClient]` and the `android` toolchain, and its
+`project.yaml` gains the FFmpeg setup (§3.3). IntercomClient's own `project.yaml` carries its
+build and test verbs. An agent then changes the API and its client in one session.
 
 The one price is memory: the `android` sidecar's 5 GiB limit counts on the node whenever the
 environment runs, server-only sessions included.
@@ -510,19 +528,7 @@ Open questions: none.
 | IntercomClient | the ViewModel, the update check, the API client | JVM unit tests |
 | End to end | the stream arrives clean and sounds right | production IntercomServer sends to the bench board or the toilet; the firmware's audio counters (packets, gaps filled, underruns) show the stream; the operator listens |
 
-## 7. Open questions
-
-- **Q1. An internal host or a public one?** Recommendation: internal, `intercom.home`. The phone
-  then has to be on the home network or the VPN to manage tracks or update the app. Android
-  ignores user-installed CAs, so the app bundles the step-ca root in its network security
-  config. A public host belongs to the intercom-client future, when this design is reviewed.
-- **Q2. Where the tests get FFmpeg.** Recommendation: add `ffmpeg` to the
-  `kube-coder-dotnet-toolchain` image in DockerImages, and to the container of Jenkins' test
-  stage. The tests run in the `dotnet` sidecar, which has no FFmpeg today; only the dev
-  container has it. The price is one line in a shared image, and every .NET environment carries
-  FFmpeg after that.
-
-## 8. Order of work
+## 7. Order of work
 
 1. **The test suite** for today's behaviour, and the Jenkins test stage.
 2. **The core rework:**
