@@ -118,13 +118,8 @@ proves nothing.
 
 ## What this changes in the high-level design
 
-`docs/high-level-design.md` has not been updated yet. Four points in it are now out of date:
-
-- §2 says the module variant is "still to be confirmed". It is the FH4R2.
-- §2 says USB is native "but to be verified". It is native.
-- §2 still has the relay as "to add". It is on the schematic: a G5Q-1A, driven by an S8050
-  through 1 kΩ, with a 1N4148 across the coil.
-- Q4 is settled, and §8's "assuming the FH4R2" holds.
+`docs/high-level-design.md` carries these findings: the module, the USB and the relay in §2, the
+flash layout in §8, and Q4 settled.
 
 ## Running `hwtest`
 

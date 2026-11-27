@@ -227,8 +227,8 @@ There is no speaker capability, and `Ambient:TopicPrefixes` goes.
 
 - **Discovery**, retained: a switch "Ambient sound", and a sensor "Ambient track" holding the
   name of what is playing, empty when nothing is. Both carry `device.identifiers` set to the
-  configuration's `unique_id`. That is the identifier esp-mqtt-support gives the device, so both
-  show on the toilet's own device page in HA.
+  configuration's `unique_id`, so both show on that device's own page in HA. On the toilet, that
+  is the identifier esp-mqtt-support gives the device.
 - **State**: `intercom/server/devices/<device_id>/state`, retained, for example
   `{"ambient": "ON", "track": "Rain on the skylight"}`.
 - **Commands**: `intercom/server/devices/<device_id>/set/ambient`, with `ON` or `OFF`. A
@@ -432,8 +432,10 @@ sound track, recording.
 *Device.* A Device is an individual unit IntercomServer sends audio to, identified by the device
 id in its MQTT topics, as it last advertised itself: an intercom or a ToiletAutomation unit. This
 includes a unit that is offline. Samples: the toilet; the front-door intercom; the bench board.
-Notes: the server learns Devices from MQTT, and nobody creates one in the app. Its facts: name,
-topic prefix, endpoint, output format, whether it has a microphone, online.
+Notes: the server learns Devices from MQTT, and nobody creates one in the app. Its capabilities
+decide what the server sends it (§3.2). A Device that publishes none falls under the microphone
+rule. Its facts: name, topic prefix, endpoint, output format, capabilities, whether it has a
+microphone, online.
 
 *Ambient Playback.* An Ambient Playback is an individual run of one Ambient Track, on repeat, on
 one Device, from a start to a stop. Samples: "Rain on the skylight" on the toilet from 07:12 to
@@ -492,11 +494,11 @@ erDiagram
 | Ocean | 12:30 | yes |
 | Birds | 1:05 | yes |
 
-| Device | topic prefix | format | microphone | online |
-|---|---|---|---|---|
-| Toilet | `toilet_automation` | mono 48 kHz 16-bit | no | yes |
-| Front-door intercom | `intercom/client` | mono 16 kHz 16-bit | yes | yes |
-| Bench board | `toilet_automation` | mono 48 kHz 16-bit | no | no |
+| Device | topic prefix | format | capabilities | microphone | online |
+|---|---|---|---|---|---|
+| Toilet | `toilet_automation` | mono 48 kHz 16-bit | `pa` | no | yes |
+| Front-door intercom | `intercom/client` | mono 16 kHz 16-bit | none: the microphone rule | yes | yes |
+| Bench board | `toilet_automation` | mono 48 kHz 16-bit | `pa` | no | no |
 
 | Ambient Playback | Device | Ambient Track | started | ended |
 |---|---|---|---|---|
