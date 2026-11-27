@@ -75,7 +75,23 @@ when an operator check comes back.
   - The speaker crackled above 0.7, which was -12 dB. So 1ed4092 caps the volume at -12 dB with
     `SPEAKER_MAX_DB` in `BoardConfig.h`, and a volume of 1 is now -12 dB. The operator heard
     Identify at 1.0 play clean. NVS holds 1.0.
-- **P6: in progress** (UDP in and the advertisement).
+- **P6: in progress** (UDP in and the advertisement). Built, waiting on the operator's checks
+  and a ruling on the sender's packet split.
+  - esp-libs: f77b4ad (`UDPReceiver`, `AudioPlayer::listen(port)`, IPv4 reassembly).
+  - Firmware: ee9e7bd (the receiver, the advertisement and `audio`), 6bc5621
+    (`tools/send-audio.py`), 6015141 (HLD §5 and §9, Q6 settled).
+  - Ping from the pod: 58 ms average before, 2.7 ms after, so power save is off.
+  - The log shows the endpoint `10.1.1.20:11106`, `audio_formats.out` mono at 48000 and 16, and
+    `capabilities ["pa"]`.
+  - Five minutes with `--drop 0.01`: 29,710 packets, 290 gaps filled, 0 underruns, and the
+    stream ended once played. `--reorder 0.02` for 60 s: 121 reordered, 0 underruns. Internal
+    RAM: 160,895 B free before a stream, 153,571 B at the lowest during one.
+  - The pod's MTU is 1430, so a 1472-byte datagram arrives in two fragments. lwIP dropped them
+    until IPv4 reassembly went on.
+  - IntercomServer's split of 20 ms into 1468 and 452 bytes of PCM breaks playback from the
+    pod. The long packet, fragmented, arrives after the short one, and `StreamBuffer` cuts a
+    late packet to the mean length, so the stream runs dry every ~400 ms. Two equal 960-byte
+    packets play clean. `send-audio.py` splits equally; `--split greedy` reproduces the server.
 - **P7: not started.**
 
 ## The order
