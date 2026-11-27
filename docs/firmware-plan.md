@@ -13,14 +13,19 @@ when an operator check comes back.
   - esp-libs feac610, outside the plan, masks the Wi-Fi password in esp-mdm's boot log.
   - The operator saw the LED follow the fail-safe and passed the HA checks. WC Speaker's
     `fanMaxOnMinutes` is back at 60.
-- **P2: built** on 2026-11-27; **the operator's three checks are owed.**
+- **P2: built and pushed** on 2026-11-27 (e77c601); **the 30-minute count is running.**
   - Firmware: 259d32f and 443d064. `MotionFilter` with its host tests, `Pir` on GPIO1, HA's
     Motion binary_sensor, and the console's `motion` and `motion inject [ms]`.
   - The bench check passed: `motion inject 2000` turned motion on, then off 2 s later. One reset
     with the PIR uncovered gave no motion at boot.
-  - Owed by the operator: a hand in front of the PIR, in the log and in HA's Motion; five resets
-    with the PIR covered by a cup; thirty minutes with it covered, on Wi-Fi.
-- **P3 to P7: not started.**
+  - The operator confirmed HA's Motion follows a hand.
+  - Five bench resets with the PIR covered by a cup: no motion at boot. A bench reset leaves the
+    PIR powered, so a power-on trigger is untested.
+  - Running: thirty minutes with the PIR covered, on Wi-Fi, from log cursor 53093 at 14:09 UTC.
+    `motion` on the console prints the counters; accepted plus rejected is the false-trigger
+    count. Record it in the PIR section of `docs/hardware-bring-up.md`.
+- **P3: in progress** (SGP40 and VOC index, esp-libs and firmware).
+- **P4 to P7: not started.**
 
 ## The order
 
