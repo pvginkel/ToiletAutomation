@@ -1,7 +1,20 @@
 # ToiletAutomation firmware: the implementation plan
 
 Written 2026-11-27 against `9601ceb`, the skeleton that boots to `Application: Ready` on the bench
-board (WC Speaker). Nothing below is built yet.
+board (WC Speaker).
+
+## Status
+
+A new session resumes from this section. It is updated when a phase starts, when it ends, and
+when an operator check comes back.
+
+- **P1: done** on 2026-11-27.
+  - Documents: 5e5084a and 6955623. Firmware: 9ef9ab0, f4dc370 and 909852a.
+  - esp-libs feac610, outside the plan, masks the Wi-Fi password in esp-mdm's boot log.
+  - The operator saw the LED follow the fail-safe and passed the HA checks. WC Speaker's
+    `fanMaxOnMinutes` is back at 60.
+- **P2: in progress.**
+- **P3 to P7: not started.**
 
 ## The order
 
@@ -91,7 +104,8 @@ Jenkinsfile and the IoT Support model shipped with the skeleton. Only the first 
 
   `motionMinPulseMs` stays under 1.7 s, the shortest real pulse
   (`docs/hardware-bring-up.md`, "The PIR").
-- **Pushes.** Every push waits for the operator's yes.
+- **Pushes.** The operator gave standing permission to push on 2026-11-27. Push at each phase's
+  end, once the gates are green.
   - Jenkins builds against esp-libs at `main`. So in a phase that changes esp-libs, esp-libs is
     pushed before ToiletAutomation. The other order breaks `Firmware/ToiletAutomation`.
   - Every ToiletAutomation push also uploads a release to IoT Support. That is harmless while WC
