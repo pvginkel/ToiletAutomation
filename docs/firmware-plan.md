@@ -75,7 +75,8 @@ when an operator check comes back.
   - The speaker crackled above 0.7, which was -12 dB. So 1ed4092 caps the volume at -12 dB with
     `SPEAKER_MAX_DB` in `BoardConfig.h`, and a volume of 1 is now -12 dB. The operator heard
     Identify at 1.0 play clean. NVS holds 1.0.
-- **P6 and P7: not started.**
+- **P6: in progress** (UDP in and the advertisement).
+- **P7: not started.**
 
 ## The order
 
