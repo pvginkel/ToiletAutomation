@@ -1,0 +1,33 @@
+projects:
+  root:
+    description: >-
+      ToiletAutomation: ESP32-S3 firmware (ESP-IDF 5.5) for the toilet's ambient sound, motion,
+      air quality and fan relay, built against the shared components in ../esp-libs, with test/,
+      the host tests of its pure logic. hwtest/ is a standalone hardware test app, built by hand:
+      no gate builds or lints it.
+
+    # The firmware build pipeline: it builds and uploads to IoT Support.
+    jenkins: Firmware/ToiletAutomation
+
+    # No setup: the toolchains live in the sidecars, ../esp-libs is checked out by the
+    # environment, `idf.py build` writes managed_components/ and dependencies.lock on the first
+    # build, and test/'s configure downloads GoogleTest into build-test/_deps/.
+
+    # What CI runs (espFirmware.build: `/opt/esp/entrypoint.sh idf.py build`). The sidecar
+    # applies that wrapper to every command itself, so it is not spelled here. The build fails
+    # when build/toilet_automation.bin passes 1.75 MiB (tools/check-image-size.cmake).
+    build: cexec esp-idf idf.py build
+
+    test:
+      # The firmware build first, the same command as `build`, into build/: the dev workflow's
+      # per-phase gate is test and lint, and without it the firmware would first compile in the
+      # loop-tail sweep (SonosDisplay's SDSP-28).
+      - cexec esp-idf idf.py build
+      # test/: the pure logic against GoogleTest, natively. Its configure fails on an include of
+      # anything but the C++ standard library in the pure logic. Jenkins does not run it: its
+      # firmware job has the ESP-IDF container only.
+      - cexec native sh -c 'cmake -S test -B build-test -G Ninja && cmake --build build-test && ctest --test-dir build-test --output-on-failure'
+
+    lint:
+      # clang-format over main/ and test/ with main/.clang-format.
+      - cexec native sh -c 'find main test \( -name "*.c" -o -name "*.cpp" -o -name "*.h" \) -print0 | xargs -0 clang-format --style=file:main/.clang-format --dry-run --Werror'
