@@ -8,7 +8,7 @@ ESP-IDF 5.5.3, C++20.
 
 Status: second draft, 2026-11-22. The device now reports and Home Assistant decides. The sound
 comes from IntercomServer, as [ambient-sound-design.md](ambient-sound-design.md) designs. The
-hardware is the schematic at `f2b5aea`, brought up on the experimental board on 2026-11-27
+hardware is the schematic at `744a522`, brought up on the experimental board on 2026-11-27
 ([hardware-bring-up.md](hardware-bring-up.md)). How the device is flashed and tested from a
 KubeCoder environment is in
 [remote-flashing-design.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-design.md).
@@ -48,16 +48,16 @@ KubeCoder environment is in
 | HC-SR602 | Mini PIR motion sensor with a digital output | `PIR_OUT` |
 | DFRobot SEN0394 | Sensirion SGP40 VOC sensor, I2C at 0x59 | `AIRQ_SCL`, `AIRQ_SDA` |
 | HLK-5M05 | 5 V AC-DC supply, with a 1000 µF bulk capacitor on 5 V | mains via the screw terminal |
-| Omron G5Q-1A relay | Switches the fan. An S8050 drives the coil through 1 kΩ, with a 1N4148 across the coil | `RELAY` |
+| Omron G5Q-1A relay | Switches the fan. An S8050 drives the coil through 1 kΩ, with a 10 kΩ pull-down on its base and a 1N4148 across the coil | `RELAY` |
 
-The pins are in [hardware-bring-up.md](hardware-bring-up.md) and `main/board/BoardConfig.h`. Two
-hardware points are open:
+The pins are in [hardware-bring-up.md](hardware-bring-up.md) and `main/board/BoardConfig.h`.
 
-- **The relay switches mains.** That needs the fan's rating, creepage between the mains and the
-  3V3 side, and a fuse.
-- **Nothing holds the relay off during reset.** The S8050's base has no pull-down, so the relay
-  could pick up while the ESP32 is in reset or booting. A 10–100 kΩ resistor to GND fixes it. The
-  firmware drives the pin low first thing at boot.
+- **The relay stays off during reset.** R2, a 10 kΩ pull-down from the S8050's base to GND, holds
+  it off while the ESP32 is in reset or booting. It was added to the schematic at `744a522`. The
+  firmware also drives the pin low first thing at boot.
+- **The bench board has no relay fitted.** Its relay output lights an LED.
+- **Open: the relay switches mains.** That needs the fan's rating, creepage between the mains and
+  the 3V3 side, and a fuse.
 
 ## 3. System context
 
@@ -118,7 +118,7 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
 
 - **Sample rate is a parameter.** Intercom `#error`s on anything but 16 kHz. Music wants 44.1 or
   48 kHz. The MAX98357 is mono, so the stream is mono, which comes to about 770 kbit/s at
-  48 kHz/16-bit, or about 65 packets/s. The format is a decision (Q2).
+  48 kHz/16-bit, or about 65 packets/s. The format is settled at 48 kHz, 16-bit, mono (Q2).
 - **Lost packets become silence.** Intercom appends packets back to back and ignores gaps, so
   every lost packet permanently shortens the buffer (finding H2 in Intercom's
   `docs/audio-pipeline-review/`). The component uses the sequence number to fill gaps with
@@ -141,14 +141,18 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
   and exposed as an HA `number`. IntercomServer evens out the loudness between tracks, and the
   volume sets the listening level.
 
-**What the device advertises.** The retained MQTT configuration carries `endpoint` (`ip:port`)
-and `audio_formats.out` (`channel_layout`, `sample_rate`, `bit_rate`), in Intercom's shape,
-through esp-mqtt-support's `on_create_configuration`, under
+**What the device advertises.** The retained MQTT configuration carries `endpoint` (`ip:port`),
+`audio_formats.out` (`channel_layout`, `sample_rate`, `bit_rate`) and `capabilities`, in
+Intercom's shape, through esp-mqtt-support's `on_create_configuration`, under
 `CONFIG_MQTT_TOPIC_PREFIX="toilet_automation"`.
 
-- **It sends no `in`, since there is no microphone.** That is also what keeps the device out of
-  IntercomServer's calls and doorbell.
-- **One format is enough.** IntercomServer converts to whatever the device advertises.
+- **`"capabilities": ["pa"]` is hard-coded, with no setting.** `pa` puts the device on
+  IntercomServer's doorbell and other broadcasts. Without `intercom`, the device gets no calls or
+  ChatGPT conversations ([ambient-sound-design.md](ambient-sound-design.md) §3.2).
+- **It sends no `in`, since there is no microphone.** That is all it means. It does not keep the
+  device off the doorbell.
+- **One format is enough: 48 kHz, 16-bit, mono (Q2).** IntercomServer converts to whatever the
+  device advertises.
 
 **Kept out of esp-libs:** Intercom's recording/AFE path, controls, LEDs and `Device`/MQTT code.
 Intercom's `support.{h,cpp}` duplicates `esp-support` macros, so the extracted code uses
@@ -281,8 +285,11 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 
 - **Q1. What sends the music?** Settled: IntercomServer, switched by HA
   ([ambient-sound-design.md](ambient-sound-design.md)).
-- **Q2. Audio format.** 48 kHz, 44.1 kHz or 32 kHz, mono 16-bit. Lean: 48 kHz mono. The device
-  advertises one format, and IntercomServer converts to it.
+- **Q2. Audio format.** Settled: 48 kHz, 16-bit, mono. The operator asked for the best quality the
+  system supports. The tracks are phone AAC at 48 kHz and MP3s, and IntercomServer sends 16-bit
+  only, so anything above this costs Wi-Fi and buffer and plays nothing more. The checks behind it
+  are in [firmware-plan.md](firmware-plan.md) ("Settled"). The device advertises one format, and
+  IntercomServer converts to it.
 - **Q3. Fan logic on the device or in Home Assistant?** Settled: in Home Assistant, with the
   device's fail-safe (decision 5).
 - **Q4. Board variant.** Settled: the FH4R2, read from the board's eFuses
@@ -294,15 +301,20 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 
 ## 11. Order of work
 
+The firmware's order is in [firmware-plan.md](firmware-plan.md). It builds the HA device first and
+the audio last.
+
 1. **The remote bench.** Done on 2026-11-22
    ([remote-flashing-plan.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-plan.md)).
-2. **The skeleton.** The `.kubecoder` config (`esp-idf`, `native`, `esp-libs`),
-   `project.yaml`, CMake, partitions, the esp-mdm `Application`, the console, the Jenkinsfile and
-   the IoT Support model. It boots to ready on the bench, with logs read by the agent.
-3. **`esp-audio-support`.** The extraction, playback, the advertised endpoint and format, and the
-   test tone and sender.
-4. **Motion and the HA entities.**
-5. **The SGP40, the VOC index, and the relay switch with its fail-safe.**
-6. **Release wiring.** Then the first OTA through IoT Support.
-7. **The HA automations.** Occupancy, the fan and the ambient sound, once IntercomServer plays
+2. **The skeleton.** Done on 2026-11-27. The `.kubecoder` config (`esp-idf`, `native`,
+   `esp-libs`), `project.yaml`, CMake, partitions, the esp-mdm `Application`, the console, the
+   Jenkinsfile and the IoT Support model. It boots to ready on the bench, with logs read by the
+   agent. The release wiring shipped with it.
+3. **The relay switch with its fail-safe, and the HA device** (the plan's P1).
+4. **Motion** (P2).
+5. **The SGP40 and the VOC index** (P3).
+6. **`esp-audio-support`.** The extraction, playback, the advertised endpoint, format and
+   capabilities, and the test tone and sender (P4 to P6).
+7. **The first OTA** through IoT Support (P7).
+8. **The HA automations.** Occupancy, the fan and the ambient sound, once IntercomServer plays
    ([ambient-sound-design.md](ambient-sound-design.md)).

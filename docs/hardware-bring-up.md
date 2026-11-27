@@ -2,8 +2,9 @@
 
 Every part on the experimental board works on the pins the schematic gives it. The bring-up
 changed one thing in the hardware: the amplifier's SD pin is now tied to 3V3, so the amp plays the
-left I2S channel only. That change is in the schematic as of `f2b5aea`. One hardware point is
-still open: nothing holds the relay driver off while the ESP32 is in reset.
+left I2S channel only. That change is in the schematic as of `f2b5aea`. The bring-up also raised
+one hardware point: nothing held the relay driver off while the ESP32 was in reset. The schematic
+has a 10 kΩ pull-down for it, R2, as of `744a522`.
 
 Witnessed on 2026-11-27, on the operator's experimental board on the bench, wired to the schematic
 at `dba271f` with SD added. The test app is `hwtest/`. The agent read the results through the
@@ -19,7 +20,7 @@ Read off the schematic's netlist. The Waveshare ESP32-S3-Tiny's pin names are GP
 | `PIR_OUT` | 1 | HC-SR602 OUT |
 | `AIRQ_SCL` | 2 | SEN0394 (SGP40) SCL |
 | `AIRQ_SDA` | 3 | SEN0394 (SGP40) SDA |
-| `RELAY` | 4 | 1 kΩ to the S8050's base. The S8050 switches the G5Q-1A's coil, with a 1N4148 across it |
+| `RELAY` | 4 | 1 kΩ to the S8050's base, which R2 (10 kΩ) pulls to GND. The S8050 switches the G5Q-1A's coil, with a 1N4148 across it |
 | `SPEAKER_DATA` | 16 | MAX98357 DIN |
 | `SPEAKER_SCK` | 17 | MAX98357 BCLK |
 | `SPEAKER_WS` | 18 | MAX98357 LRC |
@@ -86,17 +87,19 @@ format, using sine tones.
 ### The relay
 
 GPIO4 switches the relay's output on and off, and the pin reads back the level it was set to. The
-operator saw the output follow the commands. In their words: "it's a led at the moment".
+operator saw the output follow the commands. In their words: "it's a led at the moment". The
+bench board has no relay fitted, and its relay output lights an LED.
 
-## Open hardware point: the relay during reset
+## Resolved hardware point: the relay during reset
 
-**Nothing holds the S8050's base low while the ESP32 is in reset or booting.** During that time
-nothing drives GPIO4. The relay could pick up for a moment, and the design asks that the
-relay comes up off. The first thing `hwtest` does is drive GPIO4 low, so after boot it is held
-off.
+**R2 holds the S8050's base low while the ESP32 is in reset or booting.** During that time
+nothing drives GPIO4. Without a pull-down the relay could pick up for a moment, and the design
+asks that the relay comes up off. The first thing `hwtest` does is drive GPIO4 low, so after boot
+it is held off.
 
-- **The fix.** A 10–100 kΩ resistor from the S8050's base, or from GPIO4, to GND.
-- **How to check it on the board.** Watch the relay's output during a reset.
+- **The fix.** R2, a 10 kΩ resistor from the S8050's base to GND, added to the schematic at
+  `744a522`.
+- **How to check it on a board.** Watch the relay's output during a reset.
 
 The bring-up never saw the relay turn on during a reset. But no one was watching for it, so that
 proves nothing.

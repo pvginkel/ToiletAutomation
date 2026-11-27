@@ -91,11 +91,16 @@ A visit, end to end:
 - **Sign-in.** JWT bearer validation against Keycloak realm `homelab`. The client roles from
   `resource_access` become role claims.
 - **More than one kind of device.** The server reads devices from every prefix in
-  `Devices:TopicPrefixes`, which are `intercom/client` and `toilet_automation`.
-  - A device that advertises no `audio_formats.in` has no microphone. It is never offered a call
-    or a ChatGPT conversation.
-  - The doorbell rings on the devices that can take a call, as today. `Doorbell:ExtraDevices`
-    adds others by device id, and is empty by default.
+  `Devices:TopicPrefixes`, which are `intercom/client` and `toilet_automation`. A device
+  publishes `capabilities` in its configuration, and they decide what the server sends it:
+  - `intercom`: calls, ChatGPT conversations and the pick-up button;
+  - `pa`: the doorbell and other broadcasts. Every firmware hard-codes it, with no setting. The
+    doorbell reaches every `pa` device, and `Doorbell:ExtraDevices` goes.
+
+  A device that publishes no `capabilities` keeps the microphone rule until its firmware
+  publishes them. Under that rule, a device that advertises no `audio_formats.in` has no
+  microphone and is never offered a call or a ChatGPT conversation, and the doorbell rings only on
+  the devices that can take a call.
 - **A player per device.** Each device gets its own playback, its own format (read from
   `audio_formats.out`, which today is read and ignored) and its own sequence counter. What the
   server already sends to a device (a ring, the doorbell, a ChatGPT reply) pauses that device's
@@ -213,12 +218,12 @@ visit in progress loses its sound, and the next occupancy change starts it again
 **What the server reads** under each prefix in `Devices:TopicPrefixes`:
 
 - `<prefix>/<device_id>/configuration`, retained. It holds `unique_id`, `device`, `endpoint`
-  (`ip:port`) and `audio_formats`. An empty payload removes the device.
+  (`ip:port`), `audio_formats` and `capabilities` (§3.2). An empty payload removes the device.
 - `<prefix>/<device_id>/state`, from which the server reads `online`, and `enabled` for an
   intercom.
 
-**What it publishes** for each device under a prefix in `Ambient:TopicPrefixes` (by default
-`toilet_automation`, so the intercoms get no switch):
+**What it publishes** for each device that advertises `audio_formats.out`, the intercoms included.
+There is no speaker capability, and `Ambient:TopicPrefixes` goes.
 
 - **Discovery**, retained: a switch "Ambient sound", and a sensor "Ambient track" holding the
   name of what is playing, empty when nothing is. Both carry `device.identifiers` set to the
@@ -289,7 +294,7 @@ still update itself out of the problem.
 
 ### 3.9 Settings
 
-- `Devices:TopicPrefixes`, `Ambient:TopicPrefixes` and `Doorbell:ExtraDevices` (§3.2, §3.6).
+- `Devices:TopicPrefixes` (§3.2, §3.6).
 - The loudness target (−20 LUFS), the fades (0.5 s), the prebuffer (500 ms) and the cap
   (30 min).
 - The upload limits (15 min, 50 MB).
