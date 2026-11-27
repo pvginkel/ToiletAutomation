@@ -29,8 +29,11 @@ when an operator check comes back.
     with the SGP40 sampling, and one boot in six with the PIR covered. It fell before MQTT
     connected, so HA never saw it.
   - Owed, as this phase's operator check rules: the filter ignores the PIR for the first 10 s
-    after boot, with host tests and a bench check.
-- **P3: built** on 2026-11-27; **the operator's two checks are owed.**
+    after boot. Built in 7072e25 with its host tests and c33d8cf for the docs, not yet flashed;
+    its bench check (five resets and `motion inject 2000`) waits on P3's operator checks.
+- **P3: built and pushed** on 2026-11-27 (d8ef613, esp-libs f2c3f71), built green as
+  Firmware/ToiletAutomation #4; **the operator's two checks are owed.** `voc inject 250` has
+  been on since 14:47 UTC for the HA check.
   - esp-libs: 3774d6f and f2c3f71. esp-sensor-support's `SGP40` on `i2c_master`, and Sensirion's
     gas index algorithm vendored unchanged with its licence and wrapped as `VOCIndex`. It builds
     without `-Wconversion` warnings as it is.
