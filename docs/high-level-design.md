@@ -190,7 +190,7 @@ cannot break SonosDisplay or Intercom.
   ESP's own WiFi bursts when mounted close to the antenna. The mitigations are distance on the
   PCB, and requiring a pulse of minimum length or two pulses within a window. That is the motion
   filter's job, on the device, because it needs the pulse timing. Its configuration allows
-  either.
+  either. On the bench board, 30 minutes on Wi-Fi with the PIR covered gave no edges.
 
 ## 7. Fan
 

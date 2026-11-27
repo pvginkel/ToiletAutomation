@@ -13,7 +13,7 @@ when an operator check comes back.
   - esp-libs feac610, outside the plan, masks the Wi-Fi password in esp-mdm's boot log.
   - The operator saw the LED follow the fail-safe and passed the HA checks. WC Speaker's
     `fanMaxOnMinutes` is back at 60.
-- **P2: built and pushed** on 2026-11-27 (e77c601); **the 30-minute count is running.**
+- **P2: done** on 2026-11-27. Pushed at e77c601, built green as Firmware/ToiletAutomation #3.
   - Firmware: 259d32f and 443d064. `MotionFilter` with its host tests, `Pir` on GPIO1, HA's
     Motion binary_sensor, and the console's `motion` and `motion inject [ms]`.
   - The bench check passed: `motion inject 2000` turned motion on, then off 2 s later. One reset
@@ -21,9 +21,8 @@ when an operator check comes back.
   - The operator confirmed HA's Motion follows a hand.
   - Five bench resets with the PIR covered by a cup: no motion at boot. A bench reset leaves the
     PIR powered, so a power-on trigger is untested.
-  - Running: thirty minutes with the PIR covered, on Wi-Fi, from log cursor 53093 at 14:09 UTC.
-    `motion` on the console prints the counters; accepted plus rejected is the false-trigger
-    count. Record it in the PIR section of `docs/hardware-bring-up.md`.
+  - Thirty minutes with the PIR covered, on Wi-Fi, from 14:10 to 14:40 UTC: no edges, so no
+    false triggers. The defaults stand. Recorded in `docs/hardware-bring-up.md` and HLD §6.
 - **P3: in progress** (SGP40 and VOC index, esp-libs and firmware).
 - **P4 to P7: not started.**
 

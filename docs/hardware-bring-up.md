@@ -67,10 +67,14 @@ Its output reaches GPIO1 and moves with motion. The operator saw the log follow 
 
 - **Pulse lengths.** Over about ten triggers, the output stayed high between 1.7 s and 4.8 s. The
   shortest pulses were about 1.7 s. Longer ones look like retriggering on continued motion.
-- **Not settled: a trigger at boot.** One trigger came 1.5 s after a power-up. It may be the
-  sensor warming up, or someone at the desk. Nothing here tells them apart.
-- **Not tested: Wi-Fi.** `hwtest` never turns Wi-Fi on. So the design's risk of the radio
-  triggering the PIR is still open until the firmware runs on the network.
+- **Not settled: a trigger at power-up.** One trigger came 1.5 s after a power-up under `hwtest`.
+  It may be the sensor warming up, or someone at the desk. Under the firmware, six resets gave
+  no motion at boot, five of them with the PIR under a cup. But resetting the ESP32 leaves the
+  PIR powered, so those resets say nothing about the sensor's own power-up. Unplugging the board
+  and plugging it back in would test that.
+- **Wi-Fi did not trigger it.** The firmware ran on Wi-Fi, connected to MQTT, with the PIR under
+  a cup. In 30 minutes, the motion filter counted no edges at all. The filter's defaults stay as
+  they are.
 
 ### The speaker (MAX98357)
 
