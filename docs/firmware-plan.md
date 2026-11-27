@@ -58,7 +58,8 @@ when an operator check comes back.
     jitter, not just the prebuffer. HLD §5 now says so.
   - Today's IntercomServer splits each 20 ms at 48 kHz into a 1468- and a 452-byte packet, so
     a lost packet's length is estimated from the stream's mean.
-- **P5 to P7: not started.**
+- **P5: in progress** (I2S out, the volume and Identify).
+- **P6 and P7: not started.**
 
 ## The order
 
