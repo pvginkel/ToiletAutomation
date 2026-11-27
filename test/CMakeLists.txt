@@ -17,9 +17,9 @@ endif()
 
 get_filename_component(MAIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../main ABSOLUTE)
 
-# The pure logic (docs/high-level-design.md, section 4): main/motion/ and main/relay/. The pure half
-# of main/air/ joins this list when it is written.
-set(PURE_DIRS ${MAIN_DIR}/motion ${MAIN_DIR}/relay)
+# The pure logic (docs/high-level-design.md, section 4): main/motion/, main/relay/ and main/config/.
+# The pure half of main/air/ joins this list when it is written.
+set(PURE_DIRS ${MAIN_DIR}/motion ${MAIN_DIR}/relay ${MAIN_DIR}/config)
 
 set(PURE_FILES "")
 foreach(dir ${PURE_DIRS})
