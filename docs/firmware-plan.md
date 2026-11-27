@@ -45,7 +45,8 @@ when an operator check comes back.
   - The operator saw HA's VOC index show 250 under `voc inject 250`.
   - Isopropyl alcohol at 15:33 UTC took the index from 105 to 249 within 10 s, 406 within 30 s,
     and a peak of 496, where it held for minutes.
-- **P4: done** on 2026-11-27.
+- **P4: done** on 2026-11-27. Pushed at 196f849 with esp-libs 81bc791, built green as
+  Firmware/ToiletAutomation #6.
   - esp-libs: 862de7b and 81bc791. `esp-audio-support` with its pure core: `StreamBuffer`
     (placement by counter, gaps as silence, a new stream on a jump past the depth, several
     sources mixed), `Gain`, `AutoVolume` and `ToneSource`, and 38 host tests.
