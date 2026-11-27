@@ -93,6 +93,21 @@ when an operator check comes back.
     pod. The long packet, fragmented, arrives after the short one, and `StreamBuffer` cuts a
     late packet to the mean length, so the stream runs dry every ~400 ms. Two equal 960-byte
     packets play clean. `send-audio.py` splits equally; `--split greedy` reproduces the server.
+  - **Resume here.** Not pushed: esp-libs f77b4ad and this repo from ee9e7bd on. The board runs
+    6015141. Waiting on the operator for:
+    - the ruling on the split. Recommended: IntercomServer sends equal packets, 960 bytes of
+      PCM (10 ms) each, which fit the pod's MTU whole. Then ambient-sound-design §3.5's "Payloads
+      are 1468 bytes" changes to match, and ICOMSRV-7 (the ambient player slice) gets a comment.
+      The alternative, `StreamBuffer` holding a late packet until its place is known, reworks
+      P4's core;
+    - the listen, with no drops:
+      `python3 tools/send-audio.py --host 10.1.1.20 --test-signal 300`;
+    - the PIR count, with the PIR under a cup for 10 minutes during
+      `python3 tools/send-audio.py --host 10.1.1.20 --test-signal 600`, counting edges with
+      `motion` before and after.
+  - Then: record the results here, push esp-libs before this repo, track the build, close TA-1
+    (the configuration carries `capabilities`), and start P7, which needs the operator in IoT
+    Support.
 - **P7: not started.**
 
 ## The order
