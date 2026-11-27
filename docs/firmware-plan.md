@@ -203,8 +203,9 @@ Builds:
 - `main/motion/MotionFilter.{h,cpp}`, pure logic:
   - it takes PIR edges with their times, and `tick(now)`;
   - it puts out motion on and off;
-  - a pulse counts once it has been high for `motionMinPulseMs`, or at the `motionPulseCount`-th
-    rising edge within `motionPulseWindowSeconds`;
+  - a pulse counts once it has been high for `motionMinPulseMs` and is at least the
+    `motionPulseCount`-th such pulse within `motionPulseWindowSeconds`. Either rule alone is the
+    other left at its default, as HLD §6 asks. Built as both, the stricter reading;
   - motion goes off when the PIR goes low;
   - it counts edges, accepted pulses and rejected pulses.
 - `main/board/Pir.{h,cpp}`: `PIR_GPIO` as an input, with the pull-down and an any-edge interrupt,
