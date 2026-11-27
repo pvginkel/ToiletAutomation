@@ -8,8 +8,9 @@ ESP-IDF 5.5.3, C++20.
 
 Status: second draft, 2026-11-22. The device now reports and Home Assistant decides. The sound
 comes from IntercomServer, as [ambient-sound-design.md](ambient-sound-design.md) designs. The
-hardware is the schematic at `51c1611`, before the relay was added. How the device is flashed and
-tested from a KubeCoder environment is in
+hardware is the schematic at `f2b5aea`, brought up on the experimental board on 2026-11-27
+([hardware-bring-up.md](hardware-bring-up.md)). How the device is flashed and tested from a
+KubeCoder environment is in
 [remote-flashing-design.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-design.md).
 
 ## 1. The decisions
@@ -42,20 +43,21 @@ tested from a KubeCoder environment is in
 
 | Part | What it is | Interface |
 |---|---|---|
-| Waveshare ESP32-S3-Tiny | ESP32-S3 SiP board. The variant (S3FH4R2: 4 MB flash, 2 MB PSRAM, or N8R8) is still to be confirmed. USB-C is native USB (USB-Serial-JTAG, no UART bridge), expected but to be verified on the board | USB, BOOT and RESET buttons |
-| DFRobot MAX98357 | I2S mono class-D amplifier | `SPEAKER_SCK`, `SPEAKER_WS`, `SPEAKER_DATA` |
+| Waveshare ESP32-S3-Tiny | ESP32-S3 SiP board, the ESP32-S3FH4R2: 4 MB flash and 2 MB quad PSRAM in the package. USB-C is the S3's native USB-Serial-JTAG, with no UART bridge | USB, BOOT and RESET buttons |
+| DFRobot MAX98357 | I2S mono class-D amplifier. SD is tied to 3V3, so it plays the left I2S channel only | `SPEAKER_SCK`, `SPEAKER_WS`, `SPEAKER_DATA` |
 | HC-SR602 | Mini PIR motion sensor with a digital output | `PIR_OUT` |
 | DFRobot SEN0394 | Sensirion SGP40 VOC sensor, I2C at 0x59 | `AIRQ_SCL`, `AIRQ_SDA` |
 | HLK-5M05 | 5 V AC-DC supply, with a 1000 µF bulk capacitor on 5 V | mains via the screw terminal |
-| **Relay (to add)** | Switches the fan | one GPIO through a driver |
+| Omron G5Q-1A relay | Switches the fan. An S8050 drives the coil through 1 kΩ, with a 1N4148 across the coil | `RELAY` |
 
-The pin numbers are read off the schematic into `main/board/BoardConfig.h` when it is written. Two
-hardware points to settle before the relay goes in:
+The pins are in [hardware-bring-up.md](hardware-bring-up.md) and `main/board/BoardConfig.h`. Two
+hardware points are open:
 
-- **The relay switches mains.** That needs the fan's rating, a driver transistor and flyback diode
-  (or a relay module that has them), creepage between the mains and the 3V3 side, and a fuse.
-- **The relay comes up off.** The boot and reset state of the GPIO chosen for it must keep the
-  relay off. Some S3 GPIOs are straps or glitch at reset.
+- **The relay switches mains.** That needs the fan's rating, creepage between the mains and the
+  3V3 side, and a fuse.
+- **Nothing holds the relay off during reset.** The S8050's base has no pull-down, so the relay
+  could pick up while the ESP32 is in reset or booting. A 10–100 kΩ resistor to GND fixes it. The
+  firmware drives the pin low first thing at boot.
 
 ## 3. System context
 
@@ -129,6 +131,8 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
   96 KB per second. It can live in PSRAM if internal RAM gets tight. The buffer holds at least
   IntercomServer's prebuffer (500 ms), which the server keeps ahead of real time.
 - **WiFi modem power save off.** This is Intercom's H1 finding.
+- **The left I2S slot.** The amp plays the left channel only, so the mono stream goes out in the
+  left slot.
 - **Config struct, not `board_config.h` macros.** It carries pins, I2S port, format, buffer depth
   and UDP port.
 - **A played-samples tap.** It is a callback, so Intercom can feed its AEC reference from it when
@@ -158,7 +162,8 @@ cannot break SonosDisplay or Intercom.
 ## 6. Motion and presence
 
 - **What the sensor gives.** The HC-SR602 drives `PIR_OUT` high on motion for a short, fixed,
-  retriggerable window. The datasheet value still needs checking.
+  retriggerable window. On the bench its pulses lasted 1.7 to 4.8 s, so the motion filter's
+  minimum pulse length stays below about 1.7 s.
 - **What the firmware makes of it.** `MotionFilter` turns the pulses it accepts into `motion`, an
   HA `binary_sensor` (motion) that is on while the PIR reports motion.
 - **Occupancy is HA's.** A template binary sensor holds on for a few minutes after the last
@@ -234,7 +239,7 @@ cannot break SonosDisplay or Intercom.
 - **Home Assistant.** Discovery through `esp-mqtt-support` covers motion, the VOC index, the fan,
   the volume, identify and restart, plus esp-mdm's own diagnostics. IntercomServer adds the
   Ambient sound switch and the Ambient track sensor to the same HA device.
-- **Flash layout.** 4 MB, assuming the FH4R2: `nvs`, `otadata`, `phy_init`, two OTA slots of
+- **Flash layout.** 4 MB, for the FH4R2: `nvs`, `otadata`, `phy_init`, two OTA slots of
   about 1.9 MB, and a `coredump` partition. esp-mdm turns on coredump-to-flash and uploads the
   dump on the next boot. That needs the `coredump` partition, which Intercom's table lacks. An
   image-size check in the build keeps the app under the slot size, as SonosDisplay's does.
@@ -280,8 +285,9 @@ replaced by the MDM version on its next boot, unless the bench device's configur
   advertises one format, and IntercomServer converts to it.
 - **Q3. Fan logic on the device or in Home Assistant?** Settled: in Home Assistant, with the
   device's fail-safe (decision 5).
-- **Q4. Board variant.** FH4R2 or N8R8. This sets the flash layout and PSRAM budget.
-- **Q5. Relay and fan.** The fan's rating and the relay part.
+- **Q4. Board variant.** Settled: the FH4R2, read from the board's eFuses
+  ([hardware-bring-up.md](hardware-bring-up.md)).
+- **Q5. Relay and fan.** The relay is the G5Q-1A. The fan's rating is still open.
 - **Q6. Can a KubeCoder pod reach the device's LAN?** It matters for the test audio sender and for
   any OTA-from-the-pod variant of the bench. The production IntercomServer already reaches the
   LAN.
@@ -290,14 +296,13 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 
 1. **The remote bench.** Done on 2026-11-22
    ([remote-flashing-plan.md](https://github.com/pvginkel/FirmwareBench/blob/main/docs/remote-flashing-plan.md)).
-2. **The skeleton.** The `.kubecoder` config (`esp-idf`, `native`, `esp-libs` shared),
+2. **The skeleton.** The `.kubecoder` config (`esp-idf`, `native`, `esp-libs`),
    `project.yaml`, CMake, partitions, the esp-mdm `Application`, the console, the Jenkinsfile and
    the IoT Support model. It boots to ready on the bench, with logs read by the agent.
 3. **`esp-audio-support`.** The extraction, playback, the advertised endpoint and format, and the
    test tone and sender.
 4. **Motion and the HA entities.**
-5. **The SGP40, the VOC index, and the relay switch with its fail-safe.** The relay waits until
-   it is on the schematic.
+5. **The SGP40, the VOC index, and the relay switch with its fail-safe.**
 6. **Release wiring.** Then the first OTA through IoT Support.
 7. **The HA automations.** Occupancy, the fan and the ambient sound, once IntercomServer plays
    ([ambient-sound-design.md](ambient-sound-design.md)).
