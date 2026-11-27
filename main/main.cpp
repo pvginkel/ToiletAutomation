@@ -1,4 +1,5 @@
 #include "Application.h"
+#include "Console.h"
 #include "board/BoardConfig.h"
 #include "driver/gpio.h"
 #include "support.h"
@@ -26,5 +27,8 @@ extern "C" void app_main(void) {
     static Application application;
     application.begin();
 
-    // app_main returns: the app task runs the firmware from here.
+    static Console console(&application);
+    ESP_ERROR_CHECK(console.begin());
+
+    // app_main returns: the app task and the console's task run the firmware from here.
 }
