@@ -25,13 +25,6 @@ void Application::do_begin() {
 
     get_mqtt_connection().on_publish_discovery([this]() { publish_discovery(); });
 
-    // HA's entities are unavailable until the state topic says the device is online.
-    get_mqtt_connection().on_connected_changed([this](auto state) {
-        if (state.connected) {
-            send_state();
-        }
-    });
-
     ESP_LOGI(TAG, "Starting the app task");
 
     const auto created = xTaskCreate([](void* arg) { ((Application*)arg)->run(); }, "app", APP_TASK_STACK_SIZE, this,
@@ -74,6 +67,12 @@ void Application::do_configuration_loaded(cJSON* data) {
 
 void Application::do_ready() {
     ApplicationBase::do_ready();
+
+    // HA's entities are unavailable until the state topic says the device is online. This is the
+    // first point on the app task with MQTT connected: on_connected_changed runs on the MQTT event
+    // task, which must not publish (esp-mqtt-support's back-pressure). A lost connection restarts
+    // the device, so it comes once a boot.
+    send_state();
 
     ESP_LOGI(TAG, "Ready, firmware %s", esp_app_get_description()->version);
 }
