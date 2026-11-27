@@ -18,7 +18,7 @@ struct Recorded {
     std::vector<MotionFilter::Event> events;
     MotionFilter filter;
 
-    explicit Recorded(MotionFilter::Settings settings = {})
+    explicit Recorded(MotionFilter::Settings settings)
         : filter(settings, [this](const MotionFilter::Event& event) { events.push_back(event); }) {}
 
     // The kinds heard since the last call.
@@ -38,14 +38,16 @@ struct Recorded {
     }
 };
 
-void expect_counters(const MotionFilter& filter, uint32_t edges, uint32_t accepted, uint32_t rejected) {
+void expect_counters(const MotionFilter& filter, uint32_t edges, uint32_t accepted, uint32_t rejected,
+                     uint32_t ignored = 0) {
+    EXPECT_EQ(filter.get_counters().ignored, ignored);
     EXPECT_EQ(filter.get_counters().edges, edges);
     EXPECT_EQ(filter.get_counters().accepted, accepted);
     EXPECT_EQ(filter.get_counters().rejected, rejected);
 }
 
 TEST(MotionFilterTest, IsOffAtStart) {
-    Recorded recorded;
+    Recorded recorded({.hold_off_ms = 0});
 
     EXPECT_FALSE(recorded.filter.is_motion());
     EXPECT_FALSE(recorded.filter.get_level());
@@ -58,7 +60,7 @@ TEST(MotionFilterTest, IsOffAtStart) {
 }
 
 TEST(MotionFilterTest, TheShortestRealPulsePassesAtTheDefaults) {
-    Recorded recorded;
+    Recorded recorded({.hold_off_ms = 0});
 
     recorded.filter.edge(true, 1000);
 
@@ -77,7 +79,7 @@ TEST(MotionFilterTest, TheShortestRealPulsePassesAtTheDefaults) {
 }
 
 TEST(MotionFilterTest, TheShortestRealPulsePassesAtTheLargestMinimum) {
-    Recorded recorded({.min_pulse_ms = 1500});
+    Recorded recorded({.min_pulse_ms = 1500, .hold_off_ms = 0});
 
     recorded.filter.edge(true, 0);
     recorded.filter.tick(1499);
@@ -97,7 +99,7 @@ TEST(MotionFilterTest, TheShortestRealPulsePassesAtTheLargestMinimum) {
 }
 
 TEST(MotionFilterTest, APulseShorterThanTheMinimumIsRejected) {
-    Recorded recorded({.min_pulse_ms = 1000});
+    Recorded recorded({.min_pulse_ms = 1000, .hold_off_ms = 0});
 
     recorded.filter.edge(true, 0);
     recorded.filter.tick(999);
@@ -110,7 +112,7 @@ TEST(MotionFilterTest, APulseShorterThanTheMinimumIsRejected) {
 }
 
 TEST(MotionFilterTest, APulseThatFallsAtTheMinimumBeforeATickIsAccepted) {
-    Recorded recorded({.min_pulse_ms = 1000});
+    Recorded recorded({.min_pulse_ms = 1000, .hold_off_ms = 0});
 
     recorded.filter.edge(true, 0);
     recorded.filter.edge(false, 1000);
@@ -122,7 +124,7 @@ TEST(MotionFilterTest, APulseThatFallsAtTheMinimumBeforeATickIsAccepted) {
 }
 
 TEST(MotionFilterTest, TwoPulsesWithTheSecondInsideTheWindow) {
-    Recorded recorded({.pulse_count = 2, .pulse_window_ms = 10 * 1000});
+    Recorded recorded({.pulse_count = 2, .pulse_window_ms = 10 * 1000, .hold_off_ms = 0});
 
     recorded.pulse(0, SHORTEST_REAL_PULSE_MS);
 
@@ -149,7 +151,7 @@ TEST(MotionFilterTest, TwoPulsesWithTheSecondInsideTheWindow) {
 }
 
 TEST(MotionFilterTest, TwoPulsesWithTheSecondOutsideTheWindow) {
-    Recorded recorded({.pulse_count = 2, .pulse_window_ms = 10 * 1000});
+    Recorded recorded({.pulse_count = 2, .pulse_window_ms = 10 * 1000, .hold_off_ms = 0});
 
     recorded.pulse(0, SHORTEST_REAL_PULSE_MS);
     recorded.pulse(10 * 1000 + 1, SHORTEST_REAL_PULSE_MS);
@@ -167,7 +169,7 @@ TEST(MotionFilterTest, TwoPulsesWithTheSecondOutsideTheWindow) {
 }
 
 TEST(MotionFilterTest, APulseTooShortDoesNotCountTowardTheWindow) {
-    Recorded recorded({.min_pulse_ms = 1000, .pulse_count = 2, .pulse_window_ms = 10 * 1000});
+    Recorded recorded({.min_pulse_ms = 1000, .pulse_count = 2, .pulse_window_ms = 10 * 1000, .hold_off_ms = 0});
 
     recorded.pulse(0, 500);
     recorded.pulse(5 * 1000, SHORTEST_REAL_PULSE_MS);
@@ -179,7 +181,7 @@ TEST(MotionFilterTest, APulseTooShortDoesNotCountTowardTheWindow) {
 }
 
 TEST(MotionFilterTest, ARetriggerKeepsMotionOn) {
-    Recorded recorded({.min_pulse_ms = 1000});
+    Recorded recorded({.min_pulse_ms = 1000, .hold_off_ms = 0});
 
     recorded.filter.edge(true, 0);
     recorded.filter.tick(1000);
@@ -197,7 +199,7 @@ TEST(MotionFilterTest, ARetriggerKeepsMotionOn) {
 }
 
 TEST(MotionFilterTest, MotionGoesOffWhenThePirFalls) {
-    Recorded recorded;
+    Recorded recorded({.hold_off_ms = 0});
 
     recorded.filter.edge(true, 0);
     recorded.filter.tick(60 * 60 * 1000);
@@ -218,7 +220,7 @@ TEST(MotionFilterTest, MotionGoesOffWhenThePirFalls) {
 }
 
 TEST(MotionFilterTest, AnEdgeWithTheLevelUnchangedIsAGlitch) {
-    Recorded recorded;
+    Recorded recorded({.hold_off_ms = 0});
 
     recorded.filter.edge(false, 1000);
 
@@ -232,6 +234,66 @@ TEST(MotionFilterTest, AnEdgeWithTheLevelUnchangedIsAGlitch) {
     EXPECT_EQ(recorded.take(), (std::vector<Kind>{Kind::PIR_HIGH, Kind::PULSE_ACCEPTED, Kind::PIR_GLITCH}));
     EXPECT_EQ(recorded.filter.get_counters().glitches, 2u);
     expect_counters(recorded.filter, 1, 1, 0);
+}
+
+TEST(MotionFilterTest, APulseInsideTheHoldOffIsIgnored) {
+    Recorded recorded({});
+
+    recorded.pulse(1228, 1753);
+
+    EXPECT_FALSE(recorded.filter.is_motion());
+    EXPECT_EQ(recorded.events[1].at, 1228);
+    EXPECT_EQ(recorded.take(), (std::vector<Kind>{Kind::PIR_HIGH, Kind::PULSE_IGNORED, Kind::PIR_LOW}));
+    expect_counters(recorded.filter, 2, 0, 0, 1);
+}
+
+TEST(MotionFilterTest, APulseStraddlingTheEndOfTheHoldOffIsIgnored) {
+    Recorded recorded({});
+
+    recorded.filter.edge(true, 9000);
+    recorded.filter.tick(10 * 1000);
+    recorded.filter.tick(12 * 1000);
+
+    EXPECT_FALSE(recorded.filter.is_motion());
+
+    recorded.filter.edge(false, 13 * 1000);
+
+    EXPECT_FALSE(recorded.filter.is_motion());
+    EXPECT_EQ(recorded.take(), (std::vector<Kind>{Kind::PIR_HIGH, Kind::PULSE_IGNORED, Kind::PIR_LOW}));
+    expect_counters(recorded.filter, 2, 0, 0, 1);
+}
+
+TEST(MotionFilterTest, TheFirstPulseAfterTheHoldOffIsAccepted) {
+    Recorded recorded({});
+
+    recorded.pulse(1228, 1753);
+    recorded.take();
+    recorded.filter.edge(true, 10 * 1000);
+
+    EXPECT_TRUE(recorded.filter.is_motion());
+    EXPECT_EQ(recorded.take(), (std::vector<Kind>{Kind::PIR_HIGH, Kind::PULSE_ACCEPTED}));
+
+    recorded.filter.edge(false, 12 * 1000);
+
+    EXPECT_FALSE(recorded.filter.is_motion());
+    expect_counters(recorded.filter, 4, 1, 0, 1);
+}
+
+TEST(MotionFilterTest, AHeldOffPulseDoesNotCountTowardThePulseCount) {
+    Recorded recorded({.pulse_count = 2});
+
+    recorded.pulse(1228, 1753);
+    recorded.pulse(11 * 1000, SHORTEST_REAL_PULSE_MS);
+
+    EXPECT_FALSE(recorded.filter.is_motion());
+    EXPECT_EQ(recorded.take(), (std::vector<Kind>{Kind::PIR_HIGH, Kind::PULSE_IGNORED, Kind::PIR_LOW, Kind::PIR_HIGH,
+                                                  Kind::PULSE_TOO_FEW, Kind::PIR_LOW}));
+    expect_counters(recorded.filter, 4, 0, 1, 1);
+
+    recorded.filter.edge(true, 15 * 1000);
+
+    EXPECT_TRUE(recorded.filter.is_motion());
+    expect_counters(recorded.filter, 5, 1, 1, 1);
 }
 
 }  // namespace

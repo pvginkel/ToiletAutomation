@@ -165,10 +165,10 @@ static int motion_command(void* context, int argc, char** argv) {
     printf("Motion %s; the filter's level %d, the PIR reads %d\n", status->motion ? "on" : "off",
            status->filter_level ? 1 : 0, status->pin_level);
     printf("Since boot: edges %" PRIu32 ", glitches %" PRIu32 ", accepted %" PRIu32 ", rejected %" PRIu32
-           ", lost %" PRIu32 "\n",
-           counters.edges, counters.glitches, counters.accepted, counters.rejected, status->lost);
-    printf("Filter: min pulse %" PRId64 " ms, pulse count %d, pulse window %" PRId64 " s\n", settings.min_pulse_ms,
-           settings.pulse_count, settings.pulse_window_ms / 1000);
+           ", ignored %" PRIu32 ", lost %" PRIu32 "\n",
+           counters.edges, counters.glitches, counters.accepted, counters.rejected, counters.ignored, status->lost);
+    printf("Filter: min pulse %" PRId64 " ms, pulse count %d, pulse window %" PRId64 " s, hold-off %" PRId64 " s\n",
+           settings.min_pulse_ms, settings.pulse_count, settings.pulse_window_ms / 1000, settings.hold_off_ms / 1000);
 
     return *injected ? 0 : 1;
 }

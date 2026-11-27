@@ -16,9 +16,16 @@ void MotionFilter::edge(bool level, int64_t at) {
 
     if (level) {
         _rise_at = at;
-        _pending = true;
+        const auto ignoring = at < _settings.hold_off_ms;
+        _pending = !ignoring;
 
         emit(EventKind::PIR_HIGH, at);
+
+        if (ignoring) {
+            _counters.ignored++;
+            emit(EventKind::PULSE_IGNORED, at);
+            return;
+        }
 
         // At a minimum of 0 the pulse is decided at its rising edge.
         advance(at);

@@ -12,6 +12,11 @@
 // A pulse is accepted once both of these hold, and rejected when one of them cannot:
 // - it has been high for the minimum pulse length, 0 meaning from its rising edge;
 // - it is at least the pulse count-th pulse of that length to rise within the pulse window.
+// Before any of that, a pulse that rises before the hold-off after time zero (boot) has ended is
+// ignored: the PIR gives a false pulse in the first seconds after power-up. It is never accepted,
+// not even if it is still high once the hold-off has ended, and it counts toward nothing but the
+// edges and the ignored counter. Motion comes only from a pulse that rises after the hold-off.
+//
 // At the defaults, 0 ms and 1 pulse, every pulse is accepted at its rising edge. A pulse rejected
 // for having too few others in the window still counts toward the window of the pulses after it.
 //
@@ -24,6 +29,7 @@ public:
         int64_t min_pulse_ms = 0;
         int pulse_count = 1;
         int64_t pulse_window_ms = 10 * 1000;
+        int64_t hold_off_ms = 10 * 1000;  // from time zero; a pulse that rises before it ends is ignored
     };
 
     struct Counters {
@@ -31,6 +37,7 @@ public:
         uint32_t glitches;  // edges that found the level unchanged: too short to read, or read twice
         uint32_t accepted;  // pulses that turned motion on
         uint32_t rejected;  // pulses that did not
+        uint32_t ignored;   // pulses that rose inside the hold-off after boot
     };
 
     enum class EventKind {
@@ -40,6 +47,7 @@ public:
         PULSE_ACCEPTED,   // motion on
         PULSE_TOO_SHORT,  // rejected: it fell before the minimum pulse length
         PULSE_TOO_FEW,    // rejected: too few pulses within the window
+        PULSE_IGNORED,    // not decided: it rose inside the hold-off after boot
         MOTION_OFF,       // the PIR fell while motion was on
     };
 

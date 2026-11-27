@@ -181,10 +181,10 @@ void Application::on_motion_event(const MotionFilter::Event& event) {
     const auto at = event.at + ((int64_t)esp_log_timestamp() - esp_get_millis());
 
     // Every line ends with the counters as they stand after it, so a count reads off the last one.
-    char counted[96];
+    char counted[112];
     snprintf(counted, sizeof(counted),
-             "edges %" PRIu32 ", glitches %" PRIu32 ", accepted %" PRIu32 ", rejected %" PRIu32, counters.edges,
-             counters.glitches, counters.accepted, counters.rejected);
+             "edges %" PRIu32 ", glitches %" PRIu32 ", accepted %" PRIu32 ", rejected %" PRIu32 ", ignored %" PRIu32,
+             counters.edges, counters.glitches, counters.accepted, counters.rejected, counters.ignored);
 
     switch (event.kind) {
         case MotionFilter::EventKind::PIR_HIGH:
@@ -215,6 +215,13 @@ void Application::on_motion_event(const MotionFilter::Event& event) {
         case MotionFilter::EventKind::PULSE_TOO_FEW:
             ESP_LOGI(TAG, "Motion: pulse rejected, %d of the %d pulses it needs within %" PRId64 " s (%s)",
                      event.pulses, settings.pulse_count, settings.pulse_window_ms / 1000, counted);
+            break;
+
+        case MotionFilter::EventKind::PULSE_IGNORED:
+            ESP_LOGI(TAG,
+                     "Motion: pulse ignored, it rose at %" PRId64 " ms, inside the %" PRId64
+                     " s hold-off after boot (%s)",
+                     at, settings.hold_off_ms / 1000, counted);
             break;
 
         case MotionFilter::EventKind::MOTION_OFF:
