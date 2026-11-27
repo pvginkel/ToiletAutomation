@@ -3032,6 +3032,12 @@
 		)
 	)
 	(junction
+		(at 43.18 173.99)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "111797cb-f0dc-4960-82fd-40cca9de7613")
+	)
+	(junction
 		(at 85.09 29.21)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3153,7 +3159,7 @@
 	)
 	(wire
 		(pts
-			(xy 44.45 173.99) (xy 48.26 173.99)
+			(xy 38.1 173.99) (xy 43.18 173.99)
 		)
 		(stroke
 			(width 0)
@@ -3170,6 +3176,16 @@
 			(type default)
 		)
 		(uuid "0acedc84-9cd9-42fc-b345-6c1669a0b1e7")
+	)
+	(wire
+		(pts
+			(xy 43.18 173.99) (xy 48.26 173.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0b88bf95-0ae0-42d8-9a7e-f77e6c28a152")
 	)
 	(wire
 		(pts
@@ -3190,6 +3206,16 @@
 			(type default)
 		)
 		(uuid "13666970-f867-47ae-9d34-e39dcbb52662")
+	)
+	(wire
+		(pts
+			(xy 43.18 186.69) (xy 43.18 190.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "175a048c-5f8c-45a9-8161-8a99801118e7")
 	)
 	(wire
 		(pts
@@ -3453,7 +3479,7 @@
 	)
 	(wire
 		(pts
-			(xy 29.21 173.99) (xy 36.83 173.99)
+			(xy 22.86 173.99) (xy 30.48 173.99)
 		)
 		(stroke
 			(width 0)
@@ -3590,6 +3616,16 @@
 			(type default)
 		)
 		(uuid "b5cd267c-9f95-4121-aad6-8bcc622e7967")
+	)
+	(wire
+		(pts
+			(xy 43.18 173.99) (xy 43.18 179.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc1e8c6c-000a-41ad-ac5a-20f11cc88c2d")
 	)
 	(wire
 		(pts
@@ -3743,7 +3779,7 @@
 	)
 	(wire
 		(pts
-			(xy 55.88 179.07) (xy 55.88 184.15)
+			(xy 55.88 179.07) (xy 55.88 190.5)
 		)
 		(stroke
 			(width 0)
@@ -4071,7 +4107,7 @@
 	)
 	(global_label "RELAY"
 		(shape input)
-		(at 29.21 173.99 180)
+		(at 22.86 173.99 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4081,7 +4117,7 @@
 		)
 		(uuid "ea529cba-3279-48e7-aee4-c2a3e8567d86")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 20.6005 173.99 0)
+			(at 14.2505 173.99 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5273,7 +5309,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 55.88 184.15 0)
+		(at 55.88 190.5 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -5284,7 +5320,7 @@
 		(fields_autoplaced yes)
 		(uuid "5d50eccc-93cd-46e3-841e-023744b5d2d5")
 		(property "Reference" "#PWR017"
-			(at 55.88 190.5 0)
+			(at 55.88 196.85 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5295,7 +5331,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 55.88 189.23 0)
+			(at 55.88 195.58 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5305,7 +5341,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 55.88 184.15 0)
+			(at 55.88 190.5 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5316,7 +5352,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 55.88 184.15 0)
+			(at 55.88 190.5 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5327,7 +5363,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 55.88 184.15 0)
+			(at 55.88 190.5 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5990,6 +6026,88 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R")
+		(at 43.18 182.88 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b3e10cac-6f8f-41ab-9cc7-0f94a9030511")
+		(property "Reference" "R2"
+			(at 45.72 181.6099 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "10K"
+			(at 45.72 184.1499 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 44.958 182.88 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 43.18 182.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 43.18 182.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "97991e5f-c3d7-4d5b-bf7a-be32a2a79bcf")
+		)
+		(pin "2"
+			(uuid "9a1a1cf5-633b-4ab7-944d-86b0c88884ad")
+		)
+		(instances
+			(project "ToiletAutomation"
+				(path "/6becc4d2-a907-492a-8e05-c58b20e87aef"
+					(reference "R2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Custom Symbols:DFRobot_MAX98357")
 		(at 149.86 53.34 0)
 		(unit 1)
@@ -6103,7 +6221,7 @@
 	)
 	(symbol
 		(lib_id "Device:R")
-		(at 40.64 173.99 90)
+		(at 34.29 173.99 90)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -6114,7 +6232,7 @@
 		(fields_autoplaced yes)
 		(uuid "da327277-702e-4f9c-81c8-0d88ca0600ad")
 		(property "Reference" "R1"
-			(at 40.64 167.64 90)
+			(at 34.29 167.64 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6124,7 +6242,7 @@
 			)
 		)
 		(property "Value" "1K"
-			(at 40.64 170.18 90)
+			(at 34.29 170.18 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6134,7 +6252,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 40.64 175.768 90)
+			(at 34.29 175.768 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6145,7 +6263,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 40.64 173.99 0)
+			(at 34.29 173.99 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6156,7 +6274,7 @@
 			)
 		)
 		(property "Description" "Resistor"
-			(at 40.64 173.99 0)
+			(at 34.29 173.99 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6492,6 +6610,84 @@
 			(project "ToiletAutomation"
 				(path "/6becc4d2-a907-492a-8e05-c58b20e87aef"
 					(reference "#PWR07")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 43.18 190.5 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f651a1b6-aaba-4816-97a6-e959bbae85a4")
+		(property "Reference" "#PWR019"
+			(at 43.18 196.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 43.18 195.58 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 43.18 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 43.18 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 43.18 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0d703075-64ab-435a-8740-3f76108797d4")
+		)
+		(instances
+			(project "ToiletAutomation"
+				(path "/6becc4d2-a907-492a-8e05-c58b20e87aef"
+					(reference "#PWR019")
 					(unit 1)
 				)
 			)
