@@ -1,0 +1,33 @@
+# ToiletAutomation: Waveshare ESP32-S3-Tiny, an ESP32-S3FH4R2. Read after esp-libs' defaults; see
+# docs/high-level-design.md and docs/hardware-bring-up.md.
+
+# Chip, flash and partitions: 4 MB of flash in the package, with two OTA slots and a coredump
+# partition (partitions.csv; design, section 8).
+
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+
+# PSRAM: 2 MB quad, in the package. ESP-IDF's default speed, 40 MHz, is the one the bring-up
+# tested.
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+
+# Console: USB-Serial-JTAG, the board's USB-C, is the primary console, so it takes input as well as
+# printing. The bench sends console input to a primary console only (design, section 9).
+
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# Coredumps: written to partitions.csv's coredump partition, from which esp-mdm uploads the dump to
+# IoT Support on the next boot. esp-mdm's defaults set this too.
+
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+
+# MQTT: the topic prefix the device's retained configuration goes out under (design, section 5),
+# and the device as Home Assistant shows it
+
+CONFIG_MQTT_TOPIC_PREFIX="toilet_automation"
+CONFIG_MQTT_DEVICE_MANUFACTURER="Pieter"
+CONFIG_MQTT_DEVICE_MODEL="Toilet Automation"
+CONFIG_MQTT_DEVICE_MODEL_ID="Toilet Automation v1"
