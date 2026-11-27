@@ -4,6 +4,7 @@
 
 #include "board/Pir.h"
 #include "board/Relay.h"
+#include "config/Volume.h"
 #include "esp_app_desc.h"
 #include "support.h"
 
@@ -48,6 +49,10 @@ void Application::do_begin() {
     // samples wait in the queue until the app task runs it.
     _air_sensor.begin();
 
+    // NVS is up, so the speaker starts with its volume. The device configuration loads later, and
+    // brings volumeDefault for a device whose NVS has no volume.
+    ESP_ERROR_CHECK(_audio.begin(_settings));
+
     ESP_LOGI(TAG, "Starting the app task");
 
     const auto created = xTaskCreate([](void* arg) { ((Application*)arg)->run(); }, "app", APP_TASK_STACK_SIZE, this,
@@ -81,12 +86,18 @@ void Application::do_configuration_loaded(cJSON* data) {
 
     _relay_guard.set_max_on_ms(_settings.fan_max_on_minutes * MS_PER_MINUTE);
     _motion_filter.set_settings(get_motion_settings(_settings));
+    const auto volume_changed = _audio.apply_settings(_settings);
 
     ESP_LOGI(TAG,
              "Device configuration loaded: fanMaxOnMinutes %d, motionMinPulseMs %d, motionPulseCount %d, "
              "motionPulseWindowSeconds %d, volumeDefault %.2f, audioUdpPort %d",
              _settings.fan_max_on_minutes, _settings.motion_min_pulse_ms, _settings.motion_pulse_count,
              _settings.motion_pulse_window_seconds, _settings.volume_default, _settings.audio_udp_port);
+
+    // At boot this comes before MQTT, and send_state sends nothing. A later load reaches HA.
+    if (volume_changed) {
+        send_state();
+    }
 }
 
 void Application::do_ready() {
@@ -284,6 +295,38 @@ void Application::inject_voc(std::optional<int32_t> index) {
     send_state();
 }
 
+Audio::Status Application::get_audio_status() { return _audio.get_status(); }
+
+void Application::set_volume(double volume, const char* source) {
+    _audio.set_volume(volume, source);
+
+    // HA hears the state after every command, a command that changed nothing included.
+    send_state();
+}
+
+void Application::identify(const char* source) { _audio.identify(source); }
+
+void Application::play_tone(float frequency_hz, uint32_t duration_ms, float level, const char* source) {
+    _audio.play_tone(frequency_hz, duration_ms, level, source);
+}
+
+void Application::on_volume_command(const std::string& payload) {
+    const auto volume = parse_volume(payload);
+    if (!volume.has_value()) {
+        ESP_LOGW(TAG, "Volume: '%s' from Home Assistant is not a number", payload.c_str());
+
+        // HA's number goes back to the volume the device has.
+        send_state();
+        return;
+    }
+
+    if (clamp_volume(*volume) != *volume) {
+        ESP_LOGW(TAG, "Volume: %g from Home Assistant is outside 0 to 1, so it is clamped", *volume);
+    }
+
+    set_volume(*volume, "Home Assistant");
+}
+
 Application::MotionStatus Application::get_motion_status() {
     return {
         .motion = _motion_filter.is_motion(),
@@ -339,6 +382,31 @@ void Application::publish_discovery() {
             esp_restart();
         });
 
+    get_mqtt_connection().publish_button_discovery(
+        MQTTDiscovery{
+            .name = "Identify",
+            .object_id = "identify",
+            .entity_category = "config",
+            .device_class = "identify",
+        },
+        [this]() { identify("Home Assistant"); });
+
+    // No unit and no device class: the volume is a level from 0 to 1, which esp-audio-support maps
+    // onto -40 to 0 dB. A step of 0.05 is 2 dB.
+    get_mqtt_connection().publish_number_discovery(
+        MQTTDiscovery{
+            .name = "Volume",
+            .object_id = "volume",
+            .icon = "mdi:volume-high",
+        },
+        MQTTNumberDiscovery{
+            .value_template = "{{ value_json.volume }}",
+            .min = 0,
+            .max = 1,
+            .step = 0.05,
+        },
+        [this](const std::string& payload) { on_volume_command(payload); });
+
     get_mqtt_connection().publish_binary_sensor_discovery(
         MQTTDiscovery{
             .name = "Motion",
@@ -376,6 +444,7 @@ void Application::send_state() {
 
     cJSON_AddBoolToObject(state, "fan", _relay_guard.is_on());
     cJSON_AddBoolToObject(state, "motion", _motion_filter.is_motion());
+    cJSON_AddNumberToObject(state, "volume", _audio.get_volume());
 
     const auto voc_index = _voc_gate.get_published();
     if (voc_index.has_value()) {

@@ -4,6 +4,7 @@
 
 #include "ApplicationBase.h"
 #include "air/VocGate.h"
+#include "audio/Audio.h"
 #include "board/AirSensor.h"
 #include "config/DeviceSettings.h"
 #include "motion/MotionFilter.h"
@@ -11,7 +12,7 @@
 
 // The firmware's app on esp-mdm. One task, the app task, runs esp-mdm's queue: it is the only task
 // that touches the app's state, and every other task hands it a closure through get_queue(). The
-// audio part joins it in a later step (docs/firmware-plan.md).
+// speaker's player runs its own task, and the app task drives it through Audio.
 //
 // Home Assistant sees the device through esp-mqtt-support's discovery, with all of the app's state
 // in one JSON on the device's state topic.
@@ -32,6 +33,7 @@ class Application : public ApplicationBase {
     uint32_t _air_samples{};
     // The air sensor's lost samples, as last logged.
     uint32_t _logged_air_lost{};
+    Audio _audio;
 
 public:
     struct RelayStatus {
@@ -73,6 +75,13 @@ public:
     VocStatus get_voc_status();
     void inject_voc(std::optional<int32_t> index);
 
+    // The speaker, for the console and HA. On the app task only. set_volume clamps the volume to 0 to 1
+    // and keeps it in NVS, and identify plays HA's Identify: two short beeps.
+    Audio::Status get_audio_status();
+    void set_volume(double volume, const char* source);
+    void identify(const char* source);
+    void play_tone(float frequency_hz, uint32_t duration_ms, float level, const char* source);
+
 protected:
     void do_begin() override;
     void do_configuration_loaded(cJSON* data) override;
@@ -84,6 +93,7 @@ private:
     void process_motion();
     void on_motion_event(const MotionFilter::Event& event);
     void on_air_sample(const AirSensor::Sample& sample);
+    void on_volume_command(const std::string& payload);
     void publish_discovery();
     void send_state();
 };

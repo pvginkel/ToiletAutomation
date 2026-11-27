@@ -4,6 +4,7 @@
 // numbers, wired to the schematic (docs/hardware-bring-up.md, "Pins").
 
 #include "driver/gpio.h"
+#include "driver/i2s_types.h"
 
 // HC-SR602 PIR: OUT is high on motion.
 
@@ -19,7 +20,10 @@ constexpr gpio_num_t AIRQ_GPIO_SDA = GPIO_NUM_3;
 
 constexpr gpio_num_t RELAY_GPIO = GPIO_NUM_4;
 
-// MAX98357 on I2S. Its SD is tied to 3V3, so it plays the left slot only.
+// MAX98357 on I2S, in Philips format at 48 kHz as the bring-up tested it. Its SD is tied to 3V3, so it
+// plays the left slot only.
+
+constexpr i2s_port_t SPEAKER_I2S_PORT = I2S_NUM_0;
 
 constexpr gpio_num_t SPEAKER_GPIO_DATA = GPIO_NUM_16;  // DIN
 constexpr gpio_num_t SPEAKER_GPIO_SCK = GPIO_NUM_17;   // BCLK

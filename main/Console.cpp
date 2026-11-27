@@ -29,6 +29,15 @@ static constexpr long INJECT_MAX_MS = 10 * 60 * 1000;
 static constexpr long VOC_INDEX_MIN = 1;
 static constexpr long VOC_INDEX_MAX = 500;
 
+// tone's defaults and ranges. The level is before the volume, so at the default volume of 0.5 a full
+// level is -20 dBFS. The highest frequency stays under half of 48 kHz.
+static constexpr long TONE_DEFAULT_HZ = 440;
+static constexpr long TONE_DEFAULT_MS = 1000;
+static constexpr double TONE_DEFAULT_LEVEL = 1.0;
+static constexpr long TONE_MIN_HZ = 20;
+static constexpr long TONE_MAX_HZ = 20000;
+static constexpr long TONE_MAX_MS = 30000;
+
 static esp_err_t add_command(const char* name, const char* help, esp_console_cmd_func_t func) {
     const esp_console_cmd_t command = {.command = name, .help = help, .func = func};
 
@@ -234,6 +243,140 @@ static int voc_command(void* context, int argc, char** argv) {
     return 0;
 }
 
+// A whole number from min to max, or none.
+static std::optional<long> parse_long(const char* text, long min, long max) {
+    char* end;
+    const auto value = strtol(text, &end, 10);
+    if (*end || end == text || value < min || value > max) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+// A number from 0 to 1, or none.
+static std::optional<double> parse_unit(const char* text) {
+    char* end;
+    const auto value = strtod(text, &end);
+    if (*end || end == text || !(value >= 0.0 && value <= 1.0)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+static void print_volume(const Audio::Status& status) {
+    printf("Volume %.2f (%.1f dB), %s\n", status.volume, status.volume_db,
+           status.volume_saved ? "from NVS" : "volumeDefault: NVS has none");
+}
+
+// tone [hz] [ms] [level]: plays a sine through the volume, as a stream would.
+static int tone_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    if (argc > 4) {
+        printf("Usage: tone [hz] [ms] [level]\n");
+        return 1;
+    }
+
+    auto hz = TONE_DEFAULT_HZ;
+    auto ms = TONE_DEFAULT_MS;
+    auto level = TONE_DEFAULT_LEVEL;
+
+    if (argc > 1) {
+        const auto parsed = parse_long(argv[1], TONE_MIN_HZ, TONE_MAX_HZ);
+        if (!parsed.has_value()) {
+            printf("The frequency is %ld to %ld Hz\n", TONE_MIN_HZ, TONE_MAX_HZ);
+            return 1;
+        }
+        hz = *parsed;
+    }
+    if (argc > 2) {
+        const auto parsed = parse_long(argv[2], 1, TONE_MAX_MS);
+        if (!parsed.has_value()) {
+            printf("The length is 1 to %ld ms\n", TONE_MAX_MS);
+            return 1;
+        }
+        ms = *parsed;
+    }
+    if (argc > 3) {
+        const auto parsed = parse_unit(argv[3]);
+        if (!parsed.has_value()) {
+            printf("The level is 0 to 1 of full scale, before the volume\n");
+            return 1;
+        }
+        level = *parsed;
+    }
+
+    const auto status = std::make_shared<Audio::Status>();
+
+    if (!run_on_app_task(application, [application, hz, ms, level, status]() {
+            application->play_tone((float)hz, (uint32_t)ms, (float)level, "the console");
+            *status = application->get_audio_status();
+        })) {
+        return 1;
+    }
+
+    printf("Tone: %ld Hz, %ld ms, level %.2f\n", hz, ms, level);
+    print_volume(*status);
+
+    return 0;
+}
+
+// volume [0-1]: prints the volume, after setting it as Home Assistant's Volume does when asked to.
+static int volume_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    std::optional<double> volume;
+    if (argc == 2) {
+        volume = parse_unit(argv[1]);
+        if (!volume.has_value()) {
+            printf("The volume is 0 to 1\n");
+            return 1;
+        }
+    } else if (argc != 1) {
+        printf("Usage: volume [0-1]\n");
+        return 1;
+    }
+
+    const auto status = std::make_shared<Audio::Status>();
+
+    if (!run_on_app_task(application, [application, volume, status]() {
+            if (volume.has_value()) {
+                application->set_volume(*volume, "the console");
+            }
+            *status = application->get_audio_status();
+        })) {
+        return 1;
+    }
+
+    print_volume(*status);
+
+    return 0;
+}
+
+// identify: plays Home Assistant's Identify, two short beeps.
+static int identify_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    if (argc != 1) {
+        printf("Usage: identify\n");
+        return 1;
+    }
+
+    const auto status = std::make_shared<Audio::Status>();
+
+    if (!run_on_app_task(application, [application, status]() {
+            application->identify("the console");
+            *status = application->get_audio_status();
+        })) {
+        return 1;
+    }
+
+    printf("Identify: two beeps\n");
+    print_volume(*status);
+
+    return 0;
+}
+
 esp_err_t Console::begin() {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = PROMPT;
@@ -250,7 +393,7 @@ esp_err_t Console::begin() {
 
     // The test hooks of docs/high-level-design.md, section 9, each registered in the phase that
     // builds its part. A hook reaches its part through _application, on the app task. Still to
-    // come: play a test tone, and print the audio counters.
+    // come: print the audio counters.
     ESP_ERROR_RETURN(add_command("relay", "[on|off]",
                                  "Force the fan relay on or off through its fail-safe, and print its state and "
                                  "the on-time left",
@@ -263,6 +406,16 @@ esp_err_t Console::begin() {
                                  "Print the SGP40's raw value, the VOC index and the blackout, and the index "
                                  "Home Assistant gets. inject first overrides that index, and inject off releases it",
                                  voc_command, _application));
+    ESP_ERROR_RETURN(add_command("tone", "[hz] [ms] [level]",
+                                 "Play a sine on the speaker through the volume: 440 Hz for 1000 ms at a level of 1 "
+                                 "by default, the level 0 to 1 of full scale before the volume",
+                                 tone_command, _application));
+    ESP_ERROR_RETURN(add_command("volume", "[0-1]",
+                                 "Print the volume and whether it is NVS's. With a value, first set it as Home "
+                                 "Assistant's Volume does, kept in NVS",
+                                 volume_command, _application));
+    ESP_ERROR_RETURN(add_command("identify", nullptr, "Play Home Assistant's Identify: two short beeps",
+                                 identify_command, _application));
 
     ESP_ERROR_RETURN(esp_console_start_repl(repl));
 
