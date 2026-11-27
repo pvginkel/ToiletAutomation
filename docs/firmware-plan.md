@@ -13,7 +13,13 @@ when an operator check comes back.
   - esp-libs feac610, outside the plan, masks the Wi-Fi password in esp-mdm's boot log.
   - The operator saw the LED follow the fail-safe and passed the HA checks. WC Speaker's
     `fanMaxOnMinutes` is back at 60.
-- **P2: in progress.**
+- **P2: built** on 2026-11-27; **the operator's three checks are owed.**
+  - Firmware: 259d32f and 443d064. `MotionFilter` with its host tests, `Pir` on GPIO1, HA's
+    Motion binary_sensor, and the console's `motion` and `motion inject [ms]`.
+  - The bench check passed: `motion inject 2000` turned motion on, then off 2 s later. One reset
+    with the PIR uncovered gave no motion at boot.
+  - Owed by the operator: a hand in front of the PIR, in the log and in HA's Motion; five resets
+    with the PIR covered by a cup; thirty minutes with it covered, on Wi-Fi.
 - **P3 to P7: not started.**
 
 ## The order
