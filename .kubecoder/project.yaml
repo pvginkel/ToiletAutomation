@@ -29,5 +29,10 @@ projects:
       - cexec native sh -c 'cmake -S test -B build-test -G Ninja && cmake --build build-test && ctest --test-dir build-test --output-on-failure'
 
     lint:
+      # The architecture-as-code artifact validator, exactly as Jenkinsfile.architecture runs
+      # it, from the aac-tools toolchain. It POSTs to the architecture service, so this gate
+      # needs outbound HTTPS: it exits 2, not 1, when the service is unreachable, which is a
+      # transport failure rather than an invalid artifact.
+      - cexec aac-tools arch-validate docs/architecture/*.yaml
       # clang-format over main/ and test/ with main/.clang-format.
       - cexec native sh -c 'find main test \( -name "*.c" -o -name "*.cpp" -o -name "*.h" \) -print0 | xargs -0 clang-format --style=file:main/.clang-format --dry-run --Werror'

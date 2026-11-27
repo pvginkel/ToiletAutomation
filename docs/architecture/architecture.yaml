@@ -1,0 +1,65 @@
+schemaVersion: "0.1"
+producer: toilet-automation
+
+# Toilet Automation — ESP32-S3 firmware for the device in the toilet: it plays ambient sound
+# that IntercomServer fetches and streams to it over UDP, detects motion, reads an air-quality
+# (VOC) sensor and drives the extractor fan's relay. Home Assistant decides when the sound plays
+# and when the fan runs; the device appears there as MQTT devices.
+#
+# This repo introduces the FIRMWARE, not the physical device (registered in IoT Support,
+# generated as a device: instance there). Universal esp-mdm platform edges, as SonosDisplay's:
+# NVS-provisioned addresses → no boundBy.
+#
+# The edge to the Intercom relay service (svc:intercom, owned by the intercom-server producer)
+# is the same one the Intercom firmware has: the device advertises its UDP audio endpoint and
+# format over the fixed MQTT topic contract (toilet_automation/... topics, a device topic
+# prefix IntercomServer is configured with). The topic namespace is hardcoded in both peers →
+# no boundBy. The HA discovery entities are the Home Assistant MQTT edge, as Intercom's:
+# topic convention hardcoded → no boundBy.
+
+systemSoftware:
+  - id: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    label: Toilet Automation firmware
+    summary: >-
+      ESP-IDF firmware for a mains-powered device in the toilet (ESP32-S3) that plays ambient
+      sound streamed by IntercomServer, detects motion, reads a VOC air-quality sensor and
+      switches the extractor fan; exposed to Home Assistant as MQTT devices and managed over
+      the air by IoT Support.
+    introduced: 2026-11-27
+    lifecycle: active
+    stereotype: SoftwareProduct
+    sourceRepository: git:pvginkel/ToiletAutomation
+    stats:
+      mcu: esp32-s3
+      sensors: PIR motion, SGP40 VOC
+
+relations:
+  - id: rel:toilet-automation-consumes-iotsupport
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    type: Association
+  - id: rel:toilet-automation-consumes-pub-sub
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: cap:pub-sub-broker
+    type: Association
+  - id: rel:toilet-automation-consumes-iam
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: cap:iam
+    type: Association
+  - id: rel:toilet-automation-consumes-intercom
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: svc:intercom,5914e568-7f39-461a-91fe-9981d5275fe1
+    type: Association
+  # Home Assistant MQTT integration: publishes HA discovery entities (motion, VOC index, fan
+  # relay, volume).
+  - id: rel:toilet-automation-ha-mqtt
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11
+    type: Association
+
+  # Realizes the IoT-device capability — the selection axis for the IoT view
+  # (in-house ESP32 firmware, managed by IoTSupport).
+  - id: rel:toilet-automation-realizes-iot-device
+    source: ss:toilet-automation,52579e98-a597-4a08-abb5-95423346d57b
+    target: cap:iot-device
+    type: Realization
