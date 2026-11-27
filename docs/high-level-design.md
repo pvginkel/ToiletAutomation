@@ -134,13 +134,29 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
 - **WiFi modem power save off.** This is Intercom's H1 finding.
 - **The left I2S slot.** The amp plays the left channel only, so the mono stream goes out in the
   left slot.
-- **Config struct, not `board_config.h` macros.** It carries pins, I2S port, format, buffer depth
-  and UDP port.
-- **A played-samples tap.** It is a callback, so Intercom can feed its AEC reference from it when
-  it migrates. That coupling is the only thing tying Intercom's playback to its microphone path.
-- **AutoVolume stays optional.** Volume is a 0–1 setting mapped to a dB range, persisted in NVS
-  and exposed as an HA `number`. IntercomServer evens out the loudness between tracks, and the
-  volume sets the listening level.
+- **Config struct, not `board_config.h` macros.** It carries the pins, the I2S port, the format,
+  the buffer's depth, the UDP port and whether the buffer is in PSRAM.
+  - The format is Philips on this board, which the bring-up tested, and MSB on Intercom's.
+  - ToiletAutomation puts the buffer in PSRAM. The board has 2 MB of it, and internal RAM goes to
+    Wi-Fi and TLS.
+- **One grace, in the stream buffer.** This is Intercom's H3 finding. A stream that runs dry plays
+  silence for 500 ms while it waits for its next packet, and the I2S output runs on through it.
+  Only after the grace does the stream end and the output stop. The output has no grace of its
+  own: the silence it writes after the last block drains its DMA, so the last samples play out
+  before the clocks stop.
+- **A played-samples tap.** It is a callback with each block's samples and the time its first one
+  plays, and a reset when the output starts or stops. Intercom can feed its AEC reference from it
+  when it migrates. That coupling is the only thing tying Intercom's playback to its microphone
+  path.
+- **AutoVolume stays optional.** It is off here. IntercomServer evens out the loudness between
+  tracks, and the volume sets the listening level.
+- **The volume.** It is a setting from 0 to 1, exposed as HA's Volume `number` in steps of 0.05.
+  - Above 0 it maps linearly onto -40 to 0 dB, so 0.5 is -20 dB and a step is 2 dB. 0 mutes.
+  - It is kept in NVS. Until HA has set one, the device configuration's `volumeDefault` applies.
+  - It is the last stage, so it sets the level of the tone and Identify's beeps as well as the
+    stream's.
+- **A tone for tests and Identify.** HA's Identify button plays two beeps of 880 Hz, 120 ms each,
+  at full scale before the volume. At the default volume they are as loud as `hwtest`'s beeps.
 
 **What the device advertises.** The retained MQTT configuration carries `endpoint` (`ip:port`),
 `audio_formats.out` (`channel_layout`, `sample_rate`, `bit_rate`) and `capabilities`, in
@@ -269,7 +285,8 @@ The agent-driven layer needs two things built into the firmware:
 
 - **A console with test hooks.** Make USB-Serial-JTAG the primary console, so it accepts input as
   well as printing. The `esp_console` commands to add are: inject motion, inject a VOC index,
-  force the relay, play a test tone, and print audio counters (packets, gaps filled, underruns).
+  force the relay, play a test tone, set the volume, play Identify, and print audio counters
+  (packets, gaps filled, underruns).
   The agent then exercises the whole path on the device without touching it.
 - **A test audio sender.** `tools/send-audio.py` streams a WAV file in the UDP format. Whether the
   pod can reach the device on the LAN is open (Q6). Without that, the agent verifies the audio
