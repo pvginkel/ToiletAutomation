@@ -1,7 +1,6 @@
 #include "Application.h"
 #include "Console.h"
-#include "board/BoardConfig.h"
-#include "driver/gpio.h"
+#include "board/Relay.h"
 #include "support.h"
 
 LOG_TAG(main);
@@ -10,15 +9,9 @@ LOG_TAG(main);
 // the chip is in reset (docs/hardware-bring-up.md), so the pin is driven low before anything else
 // runs, esp-mdm included.
 static void drive_relay_off() {
-    ESP_ERROR_CHECK(gpio_set_level(RELAY_GPIO, 0));
+    Relay::begin();
 
-    const gpio_config_t config = {
-        .pin_bit_mask = 1ull << RELAY_GPIO,
-        .mode = GPIO_MODE_OUTPUT,
-    };
-    ESP_ERROR_CHECK(gpio_config(&config));
-
-    ESP_LOGI(TAG, "Relay driven off");
+    ESP_LOGI(TAG, "Relay driven off (pin reads %d)", Relay::get_level());
 }
 
 extern "C" void app_main(void) {
