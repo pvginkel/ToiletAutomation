@@ -2,6 +2,7 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -19,6 +20,10 @@ static constexpr char PROMPT[] = "toilet> ";
 
 // How long a command waits for the app task. Its HTTPS calls at boot hold it for seconds.
 static constexpr uint32_t APP_TASK_TIMEOUT_MS = 10000;
+
+// motion inject's pulse: by default longer than the HC-SR602's shortest, 1.7 s.
+static constexpr long INJECT_DEFAULT_MS = 2000;
+static constexpr long INJECT_MAX_MS = 10 * 60 * 1000;
 
 static esp_err_t add_command(const char* name, const char* help, esp_console_cmd_func_t func) {
     const esp_console_cmd_t command = {.command = name, .help = help, .func = func};
@@ -113,6 +118,57 @@ static int relay_command(void* context, int argc, char** argv) {
     return 0;
 }
 
+// motion [inject [ms]]: prints motion, the PIR's level and the filter's counters since boot, after
+// feeding the filter a pulse of that length when asked to.
+static int motion_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    std::optional<long> inject_ms;
+    if (argc >= 2 && argc <= 3 && strcmp(argv[1], "inject") == 0) {
+        inject_ms = INJECT_DEFAULT_MS;
+        if (argc == 3) {
+            char* end;
+            inject_ms = strtol(argv[2], &end, 10);
+            if (*end || end == argv[2] || *inject_ms < 1 || *inject_ms > INJECT_MAX_MS) {
+                printf("The pulse is 1 to %ld ms\n", INJECT_MAX_MS);
+                return 1;
+            }
+        }
+    } else if (argc != 1) {
+        printf("Usage: motion [inject [ms]]\n");
+        return 1;
+    }
+
+    const auto status = std::make_shared<Application::MotionStatus>();
+    const auto injected = std::make_shared<bool>(true);
+
+    if (!run_on_app_task(application, [application, inject_ms, status, injected]() {
+            if (inject_ms.has_value()) {
+                *injected = application->inject_motion(*inject_ms);
+            }
+            *status = application->get_motion_status();
+        })) {
+        return 1;
+    }
+
+    if (!*injected) {
+        printf("Not injected: the filter has a pulse high already\n");
+    }
+
+    const auto& counters = status->counters;
+    const auto& settings = status->settings;
+
+    printf("Motion %s; the filter's level %d, the PIR reads %d\n", status->motion ? "on" : "off",
+           status->filter_level ? 1 : 0, status->pin_level);
+    printf("Since boot: edges %" PRIu32 ", glitches %" PRIu32 ", accepted %" PRIu32 ", rejected %" PRIu32
+           ", lost %" PRIu32 "\n",
+           counters.edges, counters.glitches, counters.accepted, counters.rejected, status->lost);
+    printf("Filter: min pulse %" PRId64 " ms, pulse count %d, pulse window %" PRId64 " s\n", settings.min_pulse_ms,
+           settings.pulse_count, settings.pulse_window_ms / 1000);
+
+    return *injected ? 0 : 1;
+}
+
 esp_err_t Console::begin() {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = PROMPT;
@@ -129,11 +185,15 @@ esp_err_t Console::begin() {
 
     // The test hooks of docs/high-level-design.md, section 9, each registered in the phase that
     // builds its part. A hook reaches its part through _application, on the app task. Still to
-    // come: inject motion, inject a VOC index, play a test tone, and print the audio counters.
+    // come: inject a VOC index, play a test tone, and print the audio counters.
     ESP_ERROR_RETURN(add_command("relay", "[on|off]",
                                  "Force the fan relay on or off through its fail-safe, and print its state and "
                                  "the on-time left",
                                  relay_command, _application));
+    ESP_ERROR_RETURN(add_command("motion", "[inject [ms]]",
+                                 "Print motion, the PIR's level and the motion filter's counters since boot. "
+                                 "inject first feeds the filter a pulse of that length, 2000 ms by default",
+                                 motion_command, _application));
 
     ESP_ERROR_RETURN(esp_console_start_repl(repl));
 

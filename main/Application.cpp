@@ -2,6 +2,7 @@
 
 #include <cinttypes>
 
+#include "board/Pir.h"
 #include "board/Relay.h"
 #include "esp_app_desc.h"
 #include "support.h"
@@ -18,12 +19,29 @@ static constexpr uint32_t LOOP_DELAY_MS = 10;
 
 static constexpr int64_t MS_PER_MINUTE = 60 * 1000;
 
-Application::Application() : _relay_guard(_settings.fan_max_on_minutes * MS_PER_MINUTE) {}
+static MotionFilter::Settings get_motion_settings(const DeviceSettings& settings) {
+    return {
+        .min_pulse_ms = settings.motion_min_pulse_ms,
+        .pulse_count = settings.motion_pulse_count,
+        .pulse_window_ms = settings.motion_pulse_window_seconds * 1000ll,
+    };
+}
+
+Application::Application()
+    : _relay_guard(_settings.fan_max_on_minutes * MS_PER_MINUTE),
+      _motion_filter(get_motion_settings(_settings),
+                     [this](const MotionFilter::Event& event) { on_motion_event(event); }) {}
 
 void Application::do_begin() {
     ApplicationBase::do_begin();
 
     get_mqtt_connection().on_publish_discovery([this]() { publish_discovery(); });
+
+    // Before the network, so the filter hears a pulse that runs at boot. Its edges wait in the
+    // PIR's queue until the app task drains it.
+    Pir::begin();
+
+    ESP_LOGI(TAG, "Motion: PIR started, reads %d", Pir::get_level());
 
     ESP_LOGI(TAG, "Starting the app task");
 
@@ -57,6 +75,7 @@ void Application::do_configuration_loaded(cJSON* data) {
         [](const std::string& message) { ESP_LOGW(TAG, "Device configuration: %s", message.c_str()); });
 
     _relay_guard.set_max_on_ms(_settings.fan_max_on_minutes * MS_PER_MINUTE);
+    _motion_filter.set_settings(get_motion_settings(_settings));
 
     ESP_LOGI(TAG,
              "Device configuration loaded: fanMaxOnMinutes %d, motionMinPulseMs %d, motionPulseCount %d, "
@@ -79,6 +98,8 @@ void Application::do_ready() {
 
 void Application::do_process() {
     ApplicationBase::do_process();
+
+    process_motion();
 
     if (_relay_guard.tick(esp_get_millis())) {
         Relay::set(false);
@@ -118,6 +139,115 @@ void Application::set_relay(bool on, const char* source) {
     send_state();
 }
 
+void Application::process_motion() {
+    Pir::Edge edge;
+    while (Pir::receive(edge)) {
+        _motion_edge_source = "PIR";
+        _motion_filter.edge(edge.level, edge.at_ms);
+    }
+
+    const auto now = esp_get_millis();
+
+    if (_injected_fall_at.has_value() && now >= *_injected_fall_at) {
+        const auto at = *_injected_fall_at;
+        _injected_fall_at.reset();
+
+        _motion_edge_source = "injected pulse";
+        _motion_filter.edge(false, at);
+    }
+
+    _motion_filter.tick(now);
+
+    const auto lost = Pir::get_lost();
+    if (lost != _logged_lost) {
+        _logged_lost = lost;
+
+        ESP_LOGW(TAG, "Motion: %" PRIu32 " PIR interrupts lost since boot, to a full queue", lost);
+    }
+}
+
+void Application::on_motion_event(const MotionFilter::Event& event) {
+    const auto& counters = _motion_filter.get_counters();
+    const auto& settings = _motion_filter.get_settings();
+
+    // An edge's time on the log's clock, which counts from the reset where esp_timer counts from the
+    // app's start. The app task logs an edge late while it is busy, 10 s at boot, so the line says
+    // when the edge came.
+    const auto at = event.at + ((int64_t)esp_log_timestamp() - esp_get_millis());
+
+    // Every line ends with the counters as they stand after it, so a count reads off the last one.
+    char counted[96];
+    snprintf(counted, sizeof(counted),
+             "edges %" PRIu32 ", glitches %" PRIu32 ", accepted %" PRIu32 ", rejected %" PRIu32, counters.edges,
+             counters.glitches, counters.accepted, counters.rejected);
+
+    switch (event.kind) {
+        case MotionFilter::EventKind::PIR_HIGH:
+            ESP_LOGI(TAG, "Motion: %s high at %" PRId64 " ms (%s)", _motion_edge_source, at, counted);
+            break;
+
+        case MotionFilter::EventKind::PIR_LOW:
+            ESP_LOGI(TAG, "Motion: %s low at %" PRId64 " ms, after %" PRId64 " ms high (%s)", _motion_edge_source, at,
+                     event.high_ms, counted);
+            break;
+
+        case MotionFilter::EventKind::PIR_GLITCH:
+            ESP_LOGI(TAG, "Motion: %s glitch at %" PRId64 " ms, the level still %d (%s)", _motion_edge_source, at,
+                     event.level ? 1 : 0, counted);
+            break;
+
+        case MotionFilter::EventKind::PULSE_ACCEPTED:
+            ESP_LOGI(TAG, "Motion on: pulse accepted after %" PRId64 " ms high, %d of %d within %" PRId64 " s (%s)",
+                     event.high_ms, event.pulses, settings.pulse_count, settings.pulse_window_ms / 1000, counted);
+            send_state();
+            break;
+
+        case MotionFilter::EventKind::PULSE_TOO_SHORT:
+            ESP_LOGI(TAG, "Motion: pulse rejected, high for %" PRId64 " ms of the %" PRId64 " ms minimum (%s)",
+                     event.high_ms, settings.min_pulse_ms, counted);
+            break;
+
+        case MotionFilter::EventKind::PULSE_TOO_FEW:
+            ESP_LOGI(TAG, "Motion: pulse rejected, %d of the %d pulses it needs within %" PRId64 " s (%s)",
+                     event.pulses, settings.pulse_count, settings.pulse_window_ms / 1000, counted);
+            break;
+
+        case MotionFilter::EventKind::MOTION_OFF:
+            ESP_LOGI(TAG, "Motion off: the pulse fell after %" PRId64 " ms high (%s)", event.high_ms, counted);
+            send_state();
+            break;
+    }
+}
+
+Application::MotionStatus Application::get_motion_status() {
+    return {
+        .motion = _motion_filter.is_motion(),
+        .filter_level = _motion_filter.get_level(),
+        .pin_level = Pir::get_level(),
+        .counters = _motion_filter.get_counters(),
+        .lost = Pir::get_lost(),
+        .settings = _motion_filter.get_settings(),
+    };
+}
+
+bool Application::inject_motion(int64_t high_ms) {
+    if (_motion_filter.get_level()) {
+        ESP_LOGI(TAG, "Motion: no %" PRId64 " ms pulse injected, from the console: a pulse is high already", high_ms);
+        return false;
+    }
+
+    const auto now = esp_get_millis();
+
+    ESP_LOGI(TAG, "Motion: injecting a %" PRId64 " ms pulse, from the console", high_ms);
+
+    _injected_fall_at = now + high_ms;
+
+    _motion_edge_source = "injected pulse";
+    _motion_filter.edge(true, now);
+
+    return true;
+}
+
 void Application::publish_discovery() {
     get_mqtt_connection().publish_switch_discovery(
         MQTTDiscovery{
@@ -143,6 +273,16 @@ void Application::publish_discovery() {
 
             esp_restart();
         });
+
+    get_mqtt_connection().publish_binary_sensor_discovery(
+        MQTTDiscovery{
+            .name = "Motion",
+            .object_id = "motion",
+            .device_class = "motion",
+        },
+        MQTTBinarySensorDiscovery{
+            .value_template = "{{ value_json.motion }}",
+        });
 }
 
 void Application::send_state() {
@@ -156,6 +296,7 @@ void Application::send_state() {
     DEFER(cJSON_Delete(state));
 
     cJSON_AddBoolToObject(state, "fan", _relay_guard.is_on());
+    cJSON_AddBoolToObject(state, "motion", _motion_filter.is_motion());
 
     mqtt_connection.send_state(state);
 }
