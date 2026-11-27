@@ -6,6 +6,7 @@
 #include "NVSProperty.h"
 #include "board/BoardConfig.h"
 #include "config/Volume.h"
+#include "strformat.h"
 #include "support.h"
 
 LOG_TAG(Audio);
@@ -20,6 +21,14 @@ static constexpr uint32_t IDENTIFY_MS = 120;
 static constexpr uint32_t IDENTIFY_PAUSE_MS = 120;
 static constexpr uint32_t IDENTIFY_BEEPS = 2;
 static constexpr float IDENTIFY_LEVEL = 1.0f;
+
+// esp-audio-support plays 16-bit PCM only. Intercom's configuration calls the bits per sample bit_rate.
+static constexpr int BITS_PER_SAMPLE = 16;
+
+// pa puts the device on IntercomServer's doorbell and other broadcasts. Without intercom, it gets no
+// calls or ChatGPT conversations, and without audio_formats.in, it has no microphone
+// (docs/ambient-sound-design.md, section 3.2). Hard-coded: the device has no setting for it.
+static constexpr char CAPABILITY_PA[] = "pa";
 
 esp_err_t Audio::begin(const DeviceSettings& settings) {
     ESP_ERROR_RETURN(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &_nvs));
@@ -45,7 +54,6 @@ esp_err_t Audio::begin(const DeviceSettings& settings) {
         .dout_gpio = SPEAKER_GPIO_DATA,
         .format = I2SFormat::PHILIPS,
         .buffer_in_psram = true,
-        .udp_port = (uint16_t)settings.audio_udp_port,
         .volume = (float)_volume,
         .max_db = SPEAKER_MAX_DB,
     };
@@ -69,6 +77,41 @@ bool Audio::apply_settings(const DeviceSettings& settings) {
              _player.get_volume_db());
 
     return true;
+}
+
+esp_err_t Audio::listen(const DeviceSettings& settings) {
+    ESP_ERROR_RETURN(_player.listen((uint16_t)settings.audio_udp_port));
+
+    _udp_port = settings.audio_udp_port;
+
+    return ESP_OK;
+}
+
+void Audio::add_configuration(cJSON* json, const std::string& ip_address) {
+    const auto endpoint = strformat("%s:%d", ip_address.c_str(), _udp_port);
+    const auto endpoint_item = cJSON_AddStringToObject(json, "endpoint", endpoint.c_str());
+
+    const auto audio_formats = cJSON_AddObjectToObject(json, "audio_formats");
+    const auto out = cJSON_AddObjectToObject(audio_formats, "out");
+    cJSON_AddStringToObject(out, "channel_layout", "mono");
+    cJSON_AddNumberToObject(out, "sample_rate", _player.get_config().sample_rate_hz);
+    cJSON_AddNumberToObject(out, "bit_rate", BITS_PER_SAMPLE);
+
+    const auto capabilities = cJSON_AddArrayToObject(json, "capabilities");
+    cJSON_AddItemToArray(capabilities, cJSON_CreateString(CAPABILITY_PA));
+
+    // The log shows the fields as IntercomServer reads them.
+    const auto printed_endpoint = cJSON_PrintUnformatted(endpoint_item);
+    const auto printed_formats = cJSON_PrintUnformatted(audio_formats);
+    const auto printed_capabilities = cJSON_PrintUnformatted(capabilities);
+    DEFER({
+        cJSON_free(printed_endpoint);
+        cJSON_free(printed_formats);
+        cJSON_free(printed_capabilities);
+    });
+
+    ESP_LOGI(TAG, "Advertising endpoint %s, audio_formats %s, capabilities %s", printed_endpoint, printed_formats,
+             printed_capabilities);
 }
 
 bool Audio::set_volume(double volume, const char* source) {
@@ -122,6 +165,9 @@ Audio::Status Audio::get_status() {
         .volume_saved = _volume_saved,
         .playing = _player.is_playing(),
         .stats = _player.get_stats(),
+        .sample_rate_hz = _player.get_config().sample_rate_hz,
+        .depth_ms = _player.get_config().depth_ms,
+        .udp_port = _udp_port,
     };
 }
 

@@ -39,6 +39,11 @@ void Application::do_begin() {
 
     get_mqtt_connection().on_publish_discovery([this]() { publish_discovery(); });
 
+    // The endpoint, the format and the capabilities IntercomServer streams by. The configuration is
+    // published once MQTT connects, which comes after do_network_available has opened the port.
+    get_mqtt_connection().on_create_configuration(
+        [this](cJSON* json) { _audio.add_configuration(json, get_network_connection().get_ip_address()); });
+
     // Before the network, so the filter hears a pulse that runs at boot. Its edges wait in the
     // PIR's queue until the app task drains it.
     Pir::begin();
@@ -98,6 +103,14 @@ void Application::do_configuration_loaded(cJSON* data) {
     if (volume_changed) {
         send_state();
     }
+}
+
+void Application::do_network_available() {
+    ApplicationBase::do_network_available();
+
+    // The port is the device configuration's, so it opens once that has loaded, which comes just
+    // before this.
+    ESP_ERROR_CHECK(_audio.listen(_settings));
 }
 
 void Application::do_ready() {

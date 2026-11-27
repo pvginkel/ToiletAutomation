@@ -18,6 +18,7 @@ set(
     ../esp-libs/esp-mdm/sdkconfig.defaults
     ../esp-libs/esp-network-support/sdkconfig.defaults
     ../esp-libs/esp-mqtt-support/sdkconfig.defaults
+    ../esp-libs/esp-audio-support/sdkconfig.defaults
     sdkconfig.defaults
 )
 

@@ -12,7 +12,8 @@
 
 // The firmware's app on esp-mdm. One task, the app task, runs esp-mdm's queue: it is the only task
 // that touches the app's state, and every other task hands it a closure through get_queue(). The
-// speaker's player runs its own task, and the app task drives it through Audio.
+// speaker's player runs its own tasks, the output and the stream's receiver, and the app task drives it
+// through Audio.
 //
 // Home Assistant sees the device through esp-mqtt-support's discovery, with all of the app's state
 // in one JSON on the device's state topic.
@@ -85,6 +86,7 @@ public:
 protected:
     void do_begin() override;
     void do_configuration_loaded(cJSON* data) override;
+    void do_network_available() override;
     void do_ready() override;
     void do_process() override;
 

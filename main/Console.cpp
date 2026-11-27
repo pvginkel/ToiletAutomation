@@ -353,6 +353,47 @@ static int volume_command(void* context, int argc, char** argv) {
     return 0;
 }
 
+// audio: prints whether the speaker plays, how far the stream reaches ahead, and the stream buffer's,
+// the output's and the receiver's counters since boot.
+static int audio_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    if (argc != 1) {
+        printf("Usage: audio\n");
+        return 1;
+    }
+
+    const auto status = std::make_shared<Audio::Status>();
+
+    if (!run_on_app_task(application, [application, status]() { *status = application->get_audio_status(); })) {
+        return 1;
+    }
+
+    const auto& stats = status->stats;
+    const auto& stream = stats.stream;
+
+    printf("Speaker %s; the stream buffer holds %" PRIu64 " ms of its %" PRIu32 " ms\n",
+           status->playing ? "playing" : "idle", (uint64_t)stats.buffered_samples * 1000 / status->sample_rate_hz,
+           status->depth_ms);
+    printf("Stream since boot: packets %" PRIu32 ", gaps filled %" PRIu32 ", reordered %" PRIu32
+           ", late or duplicate %" PRIu32 ", overflows %" PRIu32 ", invalid %" PRIu32 ", new streams %" PRIu32
+           ", underruns %" PRIu32 "\n",
+           stream.packets, stream.gaps_filled, stream.reordered, stream.late_or_duplicate, stream.overflows,
+           stream.invalid, stream.new_streams, stream.underruns);
+    printf("Output since boot: starts %" PRIu32 ", DMA underruns %" PRIu32 ", %" PRIu32 " bytes of stack spare\n",
+           stats.output.starts, stats.output.underruns, stats.output.stack_spare_bytes);
+    if (status->udp_port) {
+        printf("Receiver on UDP port %d since boot: datagrams %" PRIu32 ", errors %" PRIu32 ", %" PRIu32
+               " bytes of stack spare\n",
+               status->udp_port, stats.receiver.datagrams, stats.receiver.errors, stats.receiver.stack_spare_bytes);
+    } else {
+        printf("Receiver not started: the network is not up yet\n");
+    }
+    print_volume(*status);
+
+    return 0;
+}
+
 // identify: plays Home Assistant's Identify, two short beeps.
 static int identify_command(void* context, int argc, char** argv) {
     const auto application = (Application*)context;
@@ -391,9 +432,8 @@ esp_err_t Console::begin() {
         add_command("version", "Print the firmware version, the ESP-IDF version and the uptime", version_command));
     ESP_ERROR_RETURN(add_command("heap", "Print the free internal RAM and PSRAM", heap_command));
 
-    // The test hooks of docs/high-level-design.md, section 9, each registered in the phase that
-    // builds its part. A hook reaches its part through _application, on the app task. Still to
-    // come: print the audio counters.
+    // The test hooks of docs/high-level-design.md, section 9. A hook reaches its part through
+    // _application, on the app task.
     ESP_ERROR_RETURN(add_command("relay", "[on|off]",
                                  "Force the fan relay on or off through its fail-safe, and print its state and "
                                  "the on-time left",
@@ -416,6 +456,10 @@ esp_err_t Console::begin() {
                                  volume_command, _application));
     ESP_ERROR_RETURN(add_command("identify", nullptr, "Play Home Assistant's Identify: two short beeps",
                                  identify_command, _application));
+    ESP_ERROR_RETURN(add_command("audio", nullptr,
+                                 "Print whether the speaker plays, how much the stream buffer holds, and the "
+                                 "stream's, the output's and the UDP receiver's counters since boot",
+                                 audio_command, _application));
 
     ESP_ERROR_RETURN(esp_console_start_repl(repl));
 
