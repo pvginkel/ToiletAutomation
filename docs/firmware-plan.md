@@ -13,7 +13,8 @@ when an operator check comes back.
   - esp-libs feac610, outside the plan, masks the Wi-Fi password in esp-mdm's boot log.
   - The operator saw the LED follow the fail-safe and passed the HA checks. WC Speaker's
     `fanMaxOnMinutes` is back at 60.
-- **P2: done** on 2026-11-27. Pushed at e77c601, built green as Firmware/ToiletAutomation #3.
+- **P2: reopened** on 2026-11-27 for a hold-off at boot. Pushed at e77c601, built green as
+  Firmware/ToiletAutomation #3.
   - Firmware: 259d32f and 443d064. `MotionFilter` with its host tests, `Pir` on GPIO1, HA's
     Motion binary_sensor, and the console's `motion` and `motion inject [ms]`.
   - The bench check passed: `motion inject 2000` turned motion on, then off 2 s later. One reset
@@ -23,6 +24,12 @@ when an operator check comes back.
     PIR powered, so a power-on trigger is untested.
   - Thirty minutes with the PIR covered, on Wi-Fi, from 14:10 to 14:40 UTC: no edges, so no
     false triggers. The defaults stand. Recorded in `docs/hardware-bring-up.md` and HLD §6.
+  - The trigger at boot came back. P3's flash, at 14:41 UTC with the PIR still covered, booted
+    with a pulse: high at 1228 ms, 370 ms after Wi-Fi started, for 1753 ms. It was the first boot
+    with the SGP40 sampling, and one boot in six with the PIR covered. It fell before MQTT
+    connected, so HA never saw it.
+  - Owed, as this phase's operator check rules: the filter ignores the PIR for the first 10 s
+    after boot, with host tests and a bench check.
 - **P3: built** on 2026-11-27; **the operator's two checks are owed.**
   - esp-libs: 3774d6f and f2c3f71. esp-sensor-support's `SGP40` on `i2c_master`, and Sensirion's
     gas index algorithm vendored unchanged with its licence and wrapped as `VOCIndex`. It builds
