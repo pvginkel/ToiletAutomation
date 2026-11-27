@@ -1,10 +1,29 @@
+# The KubeCoder environment for ToiletAutomation: the ESP32-S3 firmware for the toilet's ambient
+# sound, motion, air quality and fan relay, and the hardware test app in hwtest/.
+
+repos:
+  # The shared ESP-IDF component library. main/idf_component.yml declares ../../esp-libs/<component>
+  # path dependencies and the top-level CMakeLists.txt reads their sdkconfig.defaults, so the
+  # checkout has to sit beside this repo, the layout the Jenkinsfile arranges too. Shared: the
+  # esp-audio-support extraction writes into it from here.
+  - url: https://github.com/pvginkel/esp-libs
+    shared: true
+
 services:
+  # The bench: flashes the board on the operator's desk and logs its serial port.
   - bench
+
 capabilities:
   github: rw
+
 tools:
+  # ESP-IDF 5.5.3: `cexec esp-idf idf.py build`.
   - use: esp-idf
+  # Native C/C++: the host tests in test/ and clang-format for the lint gate.
+  - use: native
+
 ports:
+  # The bench's page, which the operator's Chrome opens to hold the board's USB port.
   - name: bench
     port: 3520
     type: http
