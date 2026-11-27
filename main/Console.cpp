@@ -25,6 +25,10 @@ static constexpr uint32_t APP_TASK_TIMEOUT_MS = 10000;
 static constexpr long INJECT_DEFAULT_MS = 2000;
 static constexpr long INJECT_MAX_MS = 10 * 60 * 1000;
 
+// voc inject's index: the VOC index's own range.
+static constexpr long VOC_INDEX_MIN = 1;
+static constexpr long VOC_INDEX_MAX = 500;
+
 static esp_err_t add_command(const char* name, const char* help, esp_console_cmd_func_t func) {
     const esp_console_cmd_t command = {.command = name, .help = help, .func = func};
 
@@ -169,6 +173,67 @@ static int motion_command(void* context, int argc, char** argv) {
     return *injected ? 0 : 1;
 }
 
+// voc [inject <index>|off]: prints the air sensor's last sample and the index HA gets, after
+// overriding that index, or releasing the override, when asked to.
+static int voc_command(void* context, int argc, char** argv) {
+    const auto application = (Application*)context;
+
+    // Outer: whether to inject. Inner: the index, or none to release the override.
+    std::optional<std::optional<int32_t>> inject;
+    if (argc == 3 && strcmp(argv[1], "inject") == 0) {
+        if (strcmp(argv[2], "off") == 0) {
+            inject.emplace();
+        } else {
+            char* end;
+            const auto index = strtol(argv[2], &end, 10);
+            if (*end || end == argv[2] || index < VOC_INDEX_MIN || index > VOC_INDEX_MAX) {
+                printf("The index is %ld to %ld, or off\n", VOC_INDEX_MIN, VOC_INDEX_MAX);
+                return 1;
+            }
+            inject.emplace((int32_t)index);
+        }
+    } else if (argc != 1) {
+        printf("Usage: voc [inject <index>|off]\n");
+        return 1;
+    }
+
+    const auto status = std::make_shared<Application::VocStatus>();
+
+    if (!run_on_app_task(application, [application, inject, status]() {
+            if (inject.has_value()) {
+                application->inject_voc(*inject);
+            }
+            *status = application->get_voc_status();
+        })) {
+        return 1;
+    }
+
+    if (!status->sample.has_value()) {
+        printf("No sample from the SGP40 yet: the boot log says why\n");
+    } else if (status->sample->blackout) {
+        printf("Raw %u, in the blackout: no index yet, after %" PRIu32 " samples\n", status->sample->raw,
+               status->samples);
+    } else {
+        printf("Raw %u, index %" PRId32 ", past the blackout, after %" PRIu32 " samples\n", status->sample->raw,
+               status->sample->index, status->samples);
+    }
+
+    if (status->sample.has_value() && status->sample->lost) {
+        printf("Samples lost to a full queue since boot: %" PRIu32 "\n", status->sample->lost);
+    }
+
+    if (status->override_index.has_value()) {
+        printf("Published: %" PRId32 ", injected; voc inject off brings back the measured index\n",
+               *status->override_index);
+    } else if (status->published.has_value()) {
+        printf("Published: %" PRId32 "\n", *status->published);
+    } else {
+        printf("Published: no index\n");
+    }
+
+    return 0;
+}
+
 esp_err_t Console::begin() {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = PROMPT;
@@ -185,7 +250,7 @@ esp_err_t Console::begin() {
 
     // The test hooks of docs/high-level-design.md, section 9, each registered in the phase that
     // builds its part. A hook reaches its part through _application, on the app task. Still to
-    // come: inject a VOC index, play a test tone, and print the audio counters.
+    // come: play a test tone, and print the audio counters.
     ESP_ERROR_RETURN(add_command("relay", "[on|off]",
                                  "Force the fan relay on or off through its fail-safe, and print its state and "
                                  "the on-time left",
@@ -194,6 +259,10 @@ esp_err_t Console::begin() {
                                  "Print motion, the PIR's level and the motion filter's counters since boot. "
                                  "inject first feeds the filter a pulse of that length, 2000 ms by default",
                                  motion_command, _application));
+    ESP_ERROR_RETURN(add_command("voc", "[inject <index>|off]",
+                                 "Print the SGP40's raw value, the VOC index and the blackout, and the index "
+                                 "Home Assistant gets. inject first overrides that index, and inject off releases it",
+                                 voc_command, _application));
 
     ESP_ERROR_RETURN(esp_console_start_repl(repl));
 

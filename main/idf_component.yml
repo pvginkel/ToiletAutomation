@@ -8,3 +8,5 @@ dependencies:
     path: ../../esp-libs/esp-support
   esp-mdm:
     path: ../../esp-libs/esp-mdm
+  esp-sensor-support:
+    path: ../../esp-libs/esp-sensor-support

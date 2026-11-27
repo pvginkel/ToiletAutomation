@@ -3,13 +3,15 @@
 #include <optional>
 
 #include "ApplicationBase.h"
+#include "air/VocGate.h"
+#include "board/AirSensor.h"
 #include "config/DeviceSettings.h"
 #include "motion/MotionFilter.h"
 #include "relay/RelayGuard.h"
 
 // The firmware's app on esp-mdm. One task, the app task, runs esp-mdm's queue: it is the only task
 // that touches the app's state, and every other task hands it a closure through get_queue(). The
-// air and audio parts join it in later steps (docs/firmware-plan.md).
+// audio part joins it in a later step (docs/firmware-plan.md).
 //
 // Home Assistant sees the device through esp-mqtt-support's discovery, with all of the app's state
 // in one JSON on the device's state topic.
@@ -23,6 +25,13 @@ class Application : public ApplicationBase {
     std::optional<int64_t> _injected_fall_at;
     // The PIR's lost interrupts, as last logged.
     uint32_t _logged_lost{};
+    AirSensor _air_sensor;
+    VocGate _voc_gate;
+    // The air sensor's last sample, and how many came since boot.
+    std::optional<AirSensor::Sample> _air_sample;
+    uint32_t _air_samples{};
+    // The air sensor's lost samples, as last logged.
+    uint32_t _logged_air_lost{};
 
 public:
     struct RelayStatus {
@@ -40,6 +49,13 @@ public:
         MotionFilter::Settings settings;
     };
 
+    struct VocStatus {
+        std::optional<AirSensor::Sample> sample;
+        uint32_t samples;
+        std::optional<int32_t> published;
+        std::optional<int32_t> override_index;
+    };
+
     Application();
 
     // The fan relay, for the console and HA. On the app task only. A command goes through the
@@ -52,6 +68,11 @@ public:
     MotionStatus get_motion_status();
     bool inject_motion(int64_t high_ms);
 
+    // The VOC index, for the console. On the app task only. inject_voc overrides the index HA sees,
+    // to exercise its fan automation, and releases the override on none.
+    VocStatus get_voc_status();
+    void inject_voc(std::optional<int32_t> index);
+
 protected:
     void do_begin() override;
     void do_configuration_loaded(cJSON* data) override;
@@ -62,6 +83,7 @@ private:
     void run();
     void process_motion();
     void on_motion_event(const MotionFilter::Event& event);
+    void on_air_sample(const AirSensor::Sample& sample);
     void publish_discovery();
     void send_state();
 };

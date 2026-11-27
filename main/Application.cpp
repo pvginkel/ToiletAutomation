@@ -30,7 +30,8 @@ static MotionFilter::Settings get_motion_settings(const DeviceSettings& settings
 Application::Application()
     : _relay_guard(_settings.fan_max_on_minutes * MS_PER_MINUTE),
       _motion_filter(get_motion_settings(_settings),
-                     [this](const MotionFilter::Event& event) { on_motion_event(event); }) {}
+                     [this](const MotionFilter::Event& event) { on_motion_event(event); }),
+      _air_sensor(&get_queue(), [this](const AirSensor::Sample& sample) { on_air_sample(sample); }) {}
 
 void Application::do_begin() {
     ApplicationBase::do_begin();
@@ -42,6 +43,10 @@ void Application::do_begin() {
     Pir::begin();
 
     ESP_LOGI(TAG, "Motion: PIR started, reads %d", Pir::get_level());
+
+    // Also before the network, so the algorithm's blackout runs while the device connects. Its
+    // samples wait in the queue until the app task runs it.
+    _air_sensor.begin();
 
     ESP_LOGI(TAG, "Starting the app task");
 
@@ -219,6 +224,59 @@ void Application::on_motion_event(const MotionFilter::Event& event) {
     }
 }
 
+void Application::on_air_sample(const AirSensor::Sample& sample) {
+    const auto was_blackout = !_air_sample.has_value() || _air_sample->blackout;
+
+    _air_sample = sample;
+    _air_samples++;
+
+    if (sample.lost != _logged_air_lost) {
+        _logged_air_lost = sample.lost;
+
+        ESP_LOGW(TAG, "VOC: %" PRIu32 " samples lost since boot, to a full queue", sample.lost);
+    }
+
+    if (was_blackout && !sample.blackout) {
+        ESP_LOGI(TAG, "VOC: first index %" PRId32 " after the blackout (raw %u)", sample.index, sample.raw);
+    }
+
+    if (_voc_gate.sample(sample.index, sample.blackout, esp_get_millis())) {
+        send_state();
+    }
+}
+
+Application::VocStatus Application::get_voc_status() {
+    return {
+        .sample = _air_sample,
+        .samples = _air_samples,
+        .published = _voc_gate.get_published(),
+        .override_index = _voc_gate.get_override(),
+    };
+}
+
+void Application::inject_voc(std::optional<int32_t> index) {
+    const auto now = esp_get_millis();
+
+    if (index.has_value()) {
+        _voc_gate.set_override(*index, now);
+
+        ESP_LOGI(TAG, "VOC: index %" PRId32 " injected, from the console: Home Assistant gets it until inject off",
+                 *index);
+    } else if (_voc_gate.clear_override(now)) {
+        const auto published = _voc_gate.get_published();
+        if (published.has_value()) {
+            ESP_LOGI(TAG, "VOC: injection off, from the console: back to the measured index %" PRId32, *published);
+        } else {
+            ESP_LOGI(TAG, "VOC: injection off, from the console: no index until the blackout is over");
+        }
+    } else {
+        ESP_LOGI(TAG, "VOC: injection already off, from the console");
+    }
+
+    // HA hears the state after every command, a command that changed nothing included.
+    send_state();
+}
+
 Application::MotionStatus Application::get_motion_status() {
     return {
         .motion = _motion_filter.is_motion(),
@@ -283,6 +341,20 @@ void Application::publish_discovery() {
         MQTTBinarySensorDiscovery{
             .value_template = "{{ value_json.motion }}",
         });
+
+    // No device class: HA's VOC classes take a concentration, and the index is a number from 1 to 500.
+    // The state has null in the blackout, which HA's MQTT sensor shows as unknown.
+    get_mqtt_connection().publish_sensor_discovery(
+        MQTTDiscovery{
+            .name = "VOC index",
+            .object_id = "voc_index",
+            .icon = "mdi:air-filter",
+        },
+        MQTTSensorDiscovery{
+            .state_class = "measurement",
+            .value_template = "{{ value_json.voc_index }}",
+            .suggested_display_precision = 0,
+        });
 }
 
 void Application::send_state() {
@@ -297,6 +369,13 @@ void Application::send_state() {
 
     cJSON_AddBoolToObject(state, "fan", _relay_guard.is_on());
     cJSON_AddBoolToObject(state, "motion", _motion_filter.is_motion());
+
+    const auto voc_index = _voc_gate.get_published();
+    if (voc_index.has_value()) {
+        cJSON_AddNumberToObject(state, "voc_index", *voc_index);
+    } else {
+        cJSON_AddNullToObject(state, "voc_index");
+    }
 
     mqtt_connection.send_state(state);
 }
