@@ -151,7 +151,9 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
 - **AutoVolume stays optional.** It is off here. IntercomServer evens out the loudness between
   tracks, and the volume sets the listening level.
 - **The volume.** It is a setting from 0 to 1, exposed as HA's Volume `number` in steps of 0.05.
-  - Above 0 it maps linearly onto -40 to 0 dB, so 0.5 is -20 dB and a step is 2 dB. 0 mutes.
+  - Above 0 it maps linearly onto -40 to -12 dB, so 0.5 is -26 dB and a step is 1.4 dB. 0 mutes.
+  - The top is -12 dB because the bench board's speaker crackles above it with a full-scale tone.
+    It is a board constant, `SPEAKER_MAX_DB`, not a setting.
   - It is kept in NVS. Until HA has set one, the device configuration's `volumeDefault` applies.
   - It is the last stage, so it sets the level of the tone and Identify's beeps as well as the
     stream's.

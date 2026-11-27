@@ -28,3 +28,6 @@ constexpr i2s_port_t SPEAKER_I2S_PORT = I2S_NUM_0;
 constexpr gpio_num_t SPEAKER_GPIO_DATA = GPIO_NUM_16;  // DIN
 constexpr gpio_num_t SPEAKER_GPIO_SCK = GPIO_NUM_17;   // BCLK
 constexpr gpio_num_t SPEAKER_GPIO_WS = GPIO_NUM_18;    // LRC
+
+// The loudest the speaker takes: above -12 dB, a full-scale tone crackles. So a volume of 1 is -12 dB.
+constexpr float SPEAKER_MAX_DB = -12.0f;

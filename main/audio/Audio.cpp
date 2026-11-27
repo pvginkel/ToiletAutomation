@@ -47,6 +47,7 @@ esp_err_t Audio::begin(const DeviceSettings& settings) {
         .buffer_in_psram = true,
         .udp_port = (uint16_t)settings.audio_udp_port,
         .volume = (float)_volume,
+        .max_db = SPEAKER_MAX_DB,
     };
 
     ESP_ERROR_RETURN(_player.begin(config));

@@ -392,7 +392,7 @@ void Application::publish_discovery() {
         [this]() { identify("Home Assistant"); });
 
     // No unit and no device class: the volume is a level from 0 to 1, which esp-audio-support maps
-    // onto -40 to 0 dB. A step of 0.05 is 2 dB.
+    // onto -40 dB to SPEAKER_MAX_DB (-12 dB). A step of 0.05 is 1.4 dB.
     get_mqtt_connection().publish_number_discovery(
         MQTTDiscovery{
             .name = "Volume",

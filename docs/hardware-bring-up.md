@@ -88,6 +88,8 @@ format, using sine tones.
   silent. The amp now plays the left channel only.
 - **Gain.** GAIN is left unconnected, which the MAX98357 datasheet gives as 9 dB. That's read
   from the datasheet, not measured. A tone at 20 % of full scale was clearly audible.
+- **The loudest it takes.** Under the firmware, with Identify's 880 Hz beeps at full scale, the
+  operator heard crackling above -12 dB and none at -12 dB or below.
 
 ### The relay
 
@@ -120,6 +122,7 @@ proves nothing.
 - **The motion filter ignores the PIR for the first 10 s after boot.** The PIR gives a false
   pulse after a power-up or reset, as the trigger at boot in the PIR section describes. A pulse
   that rises inside those 10 s is never accepted, even if it is still high when they end.
+- **The volume tops out at -12 dB.** Louder crackles, so a volume of 1 is -12 dB.
 - **The VOC index waits out the warm-up.** The raw signal drifts for minutes after power-up.
 - **The console works as the design wants.** USB-Serial-JTAG as the primary console, driven by
   the bench, is what the design's test hooks rely on.
