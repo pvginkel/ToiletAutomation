@@ -45,7 +45,8 @@ when an operator check comes back.
   - The operator saw HA's VOC index show 250 under `voc inject 250`.
   - Isopropyl alcohol at 15:33 UTC took the index from 105 to 249 within 10 s, 406 within 30 s,
     and a peak of 496, where it held for minutes.
-- **P4 to P7: not started.**
+- **P4: in progress** (`esp-audio-support`'s stream buffer, esp-libs and this repo's test gate).
+- **P5 to P7: not started.**
 
 ## The order
 
