@@ -59,7 +59,17 @@ when an operator check comes back.
     jitter, not just the prebuffer. HLD §5 now says so.
   - Today's IntercomServer splits each 20 ms at 48 kHz into a 1468- and a 452-byte packet, so
     a lost packet's length is estimated from the stream's mean.
-- **P5: in progress** (I2S out, the volume and Identify).
+- **P5: in progress** (I2S out, the volume and Identify). Built, waiting on the operator's checks.
+  - esp-libs: 8420e0d (`I2SOutput` and `AudioPlayer`) and 774687d (esp-mqtt-support logged a
+    bad button payload through `%s` with a `std::string`).
+  - Firmware: f511edf with `test/VolumeTest.cpp`, and 5864570 for HLD §5 and §9. The console
+    gains `tone`, `volume [0-1]` and `identify`.
+  - `StreamBuffer` owns the only grace. `I2SOutput` writes 30 ms of silence after the last
+    block so the DMA drains. The ring is 96 KB in PSRAM. Identify is two 880 Hz beeps of
+    120 ms, through the volume.
+  - The bench check passed: `tone 440 1000` played with 0 DMA underruns; `volume 0.2` was
+    saved in NVS and came back after `POST /reset`; `identify` played two beeps. Motion and air
+    still work at boot. The volume is back at 0.5, and NVS now holds it.
 - **P6 and P7: not started.**
 
 ## The order
