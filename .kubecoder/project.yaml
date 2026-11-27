@@ -27,6 +27,10 @@ projects:
       # anything but the C++ standard library in the pure logic. Jenkins does not run it: its
       # firmware job has the ESP-IDF container only.
       - cexec native sh -c 'cmake -S test -B build-test -G Ninja && cmake --build build-test && ctest --test-dir build-test --output-on-failure'
+      # ../esp-libs/esp-audio-support/test: the audio component's pure core against GoogleTest,
+      # natively, with the same check on its includes. It runs here because esp-libs has no gates
+      # of its own, and the firmware's audio rests on it.
+      - cexec native sh -c 'cmake -S ../esp-libs/esp-audio-support/test -B build-audio-test -G Ninja && cmake --build build-audio-test && ctest --test-dir build-audio-test --output-on-failure'
 
     lint:
       # The architecture-as-code artifact validator, exactly as Jenkinsfile.architecture runs
