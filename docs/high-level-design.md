@@ -169,7 +169,8 @@ cannot break SonosDisplay or Intercom.
   retriggerable window. On the bench its pulses lasted 1.7 to 4.8 s, so the motion filter's
   minimum pulse length stays below about 1.7 s.
 - **What the firmware makes of it.** `MotionFilter` turns the pulses it accepts into `motion`, an
-  HA `binary_sensor` (motion) that is on while the PIR reports motion.
+  HA `binary_sensor` (motion) that is on while the PIR reports motion. The filter ignores the PIR for the first 10 s after boot, because
+  the PIR gives a false pulse then.
 - **Occupancy is HA's.** A template binary sensor holds on for a few minutes after the last
   motion, and the sound and fan automations build on it:
 

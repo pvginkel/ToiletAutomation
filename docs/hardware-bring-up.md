@@ -117,6 +117,9 @@ proves nothing.
   FH4R2: two OTA slots of about 1.9 MB and a coredump partition.
 - **The motion filter's minimum pulse length must stay under about 1.7 s.** That's the shortest
   real pulse seen. Any requirement for a longer pulse would throw away real motion.
+- **The motion filter ignores the PIR for the first 10 s after boot.** The PIR gives a false
+  pulse after a power-up or reset, as the trigger at boot in the PIR section describes. A pulse
+  that rises inside those 10 s is never accepted, even if it is still high when they end.
 - **The VOC index waits out the warm-up.** The raw signal drifts for minutes after power-up.
 - **The console works as the design wants.** USB-Serial-JTAG as the primary console, driven by
   the bench, is what the design's test hooks rely on.
