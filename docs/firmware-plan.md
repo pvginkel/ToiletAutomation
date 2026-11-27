@@ -31,9 +31,8 @@ when an operator check comes back.
   - Owed, as this phase's operator check rules: the filter ignores the PIR for the first 10 s
     after boot. Built in 7072e25 with its host tests and c33d8cf for the docs, not yet flashed;
     its bench check (five resets and `motion inject 2000`) waits on P3's operator checks.
-- **P3: built and pushed** on 2026-11-27 (d8ef613, esp-libs f2c3f71), built green as
-  Firmware/ToiletAutomation #4; **the operator's two checks are owed.** `voc inject 250` has
-  been on since 14:47 UTC for the HA check.
+- **P3: done** on 2026-11-27. Pushed at d8ef613 with esp-libs f2c3f71, built green as
+  Firmware/ToiletAutomation #4.
   - esp-libs: 3774d6f and f2c3f71. esp-sensor-support's `SGP40` on `i2c_master`, and Sensirion's
     gas index algorithm vendored unchanged with its licence and wrapped as `VOCIndex`. It builds
     without `-Wconversion` warnings as it is.
@@ -43,8 +42,9 @@ when an operator check comes back.
   - The bench check passed: serial `0x0000057f63a1` and the self-test passing at boot, the first
     index 48 s after boot, and `voc inject 250` then `voc inject off` in the log. The first index
     is 1, and the algorithm's low-pass takes it to about 90 over the next two minutes.
-  - Owed by the operator: HA's VOC index showing 250 under `voc inject 250`, and isopropyl
-    alcohol held near the sensor driving the index well above 100 within a minute.
+  - The operator saw HA's VOC index show 250 under `voc inject 250`.
+  - Isopropyl alcohol at 15:33 UTC took the index from 105 to 249 within 10 s, 406 within 30 s,
+    and a peak of 496, where it held for minutes.
 - **P4 to P7: not started.**
 
 ## The order
