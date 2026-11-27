@@ -3,14 +3,16 @@
 Written 2026-11-27 against `9601ceb`, the skeleton that boots to `Application: Ready` on the bench
 board (WC Speaker). Nothing below is built yet.
 
-## The recommendation
+## The order
 
-Build the Home Assistant device first and the audio last:
+Settled with the operator on 2026-11-27: the Home Assistant device comes first and the audio
+last. The operator's words: "What you think is best."
 
-1. **P1**: the fan relay with its fail-safe, and the HA plumbing that every later entity reuses.
+1. **P1**: the fan relay with its fail-safe, the HA plumbing that every later entity reuses, and
+   the design documents' corrections (TA-1's documents among them).
 2. **P2**: motion.
 3. **P3**: the SGP40 and the VOC index (changes esp-libs).
-4. **P4 to P6**: `esp-audio-support` and playback (changes esp-libs).
+4. **P4 to P6**: `esp-audio-support` and playback (changes esp-libs). P6 closes TA-1.
 5. **P7**: the first OTA.
 
 Why this order:
@@ -27,8 +29,30 @@ Why this order:
 
 This order reverses the design's order of work, which builds audio before motion and the fan
 (`docs/high-level-design.md` §11: "3. **`esp-audio-support`.** … 4. **Motion and the HA
-entities.**"). Its step 6, the release wiring, is already done: the Jenkinsfile and the IoT
-Support model shipped with the skeleton. Only the first OTA is left, as P7.
+entities.**"). P1 points §11 at this plan. Its step 6, the release wiring, is already done: the
+Jenkinsfile and the IoT Support model shipped with the skeleton. Only the first OTA is left, as P7.
+
+## Settled
+
+- **The audio format is 48 kHz, 16-bit, mono.** The operator asked for the best quality the
+  system supports. The tracks are phone AAC at 48 kHz and MP3s, and IntercomServer sends 16-bit
+  only, so anything above this costs Wi-Fi and buffer and plays nothing more. The checks behind
+  it:
+  - **The amplifier** takes 8–96 kHz and plays one channel. It reaches its 105 dB dynamic range
+    with 24- or 32-bit data. Read from DFRobot's MAX98357 page (SKU DFR0954), because analog.com
+    did not answer from the pod.
+  - **The ESP32-S3's I2S** takes 8-, 16-, 24- and 32-bit data (ESP-IDF 5.5's `i2s_types.h`).
+  - **The speaker** is one speaker on a mono amplifier.
+  - **Wi-Fi.** 48 kHz/16-bit is about 770 kbit/s, or 65 packets/s. 96 kHz/24-bit would be about
+    2.3 Mbit/s and three times the packets and the buffer.
+  - **IntercomServer.**
+    - Its settled design decodes to "the device's `audio_formats.out` at 16-bit"
+      (`docs/ambient-sound-design.md` §3.5).
+    - Its code today mixes 16-bit only: `AudioUtils.MixInBuffer` throws "Only 16 bites per samples
+      is supported".
+    - Its sources are recorded "mono, 48 kHz, 128 kbit/s" (§4.3).
+- **esp-audio-support's host tests run from this repo's `kc project test`.** esp-libs has no
+  gates or CI of its own, and Intercom's gate adds the same step when it migrates.
 
 ## How every phase runs
 
@@ -41,7 +65,8 @@ Support model shipped with the skeleton. Only the first OTA is left, as P7.
   - drive the console through `POST /console`.
 
   The bench never erases `nvs`, so WC Speaker stays provisioned. A line marked *Operator* is one
-  only a person can check: hearing, seeing the relay, or HA's device page.
+  only a person can check: hearing, seeing the relay's LED, or HA's device page. The bench board
+  has no relay fitted, and its relay output lights an LED.
 - **Patterns.**
   - The owner task and queue: `main/Application.cpp` already runs esp-mdm's queue on the app task.
     Every other task hands it closures through `get_queue()`.
@@ -74,9 +99,30 @@ Support model shipped with the skeleton. Only the first OTA is left, as P7.
 
 ## The phases
 
-### P1. The fan relay and the HA device
+### P1. The fan relay, the HA device and the design's corrections
 
 Builds:
+
+- The design documents, corrected before the build starts. These edits are decided and depend on
+  no code:
+  - **TA-1's documents** (the firmware half closes in P6).
+    - `docs/high-level-design.md` §5, "What the device advertises": the configuration carries
+      `"capabilities": ["pa"]`, hard-coded, which puts the device on the doorbell and other
+      broadcasts. "It sends no `in`" now means only that there is no microphone. It no longer
+      keeps the device out of the doorbell.
+    - `docs/ambient-sound-design.md` §3.2: calls, ChatGPT conversations and the pick-up button go
+      to devices with `intercom`, and the doorbell goes to devices with `pa`. A device that
+      publishes no capabilities keeps the microphone rule. `Doorbell:ExtraDevices` is gone.
+    - §3.6: the Ambient sound switch is published for every device that advertises
+      `audio_formats.out`, and `Ambient:TopicPrefixes` is gone. Both settings also leave §3.9.
+  - **The relay.**
+    - `docs/high-level-design.md` §2 and `docs/hardware-bring-up.md` ("Open hardware point: the
+      relay during reset") say what the schematic has: a 10 kΩ pull-down, R2, added at `744a522`.
+    - The bench board has no relay fitted. Its relay output lights an LED.
+    - The HLD's status line names the schematic at `744a522`.
+  - **The audio format.** HLD §5 and Q2 record 48 kHz, 16-bit, mono as settled, with this plan's
+    reason.
+  - **The order.** HLD §11 points at this plan.
 
 - `main/relay/RelayGuard.{h,cpp}`, pure logic:
   - it starts off;
@@ -117,13 +163,18 @@ Bench check:
   follows.
 - `relay on` logs the relay on, with the pin reading 1. About 60 s later the log shows it off, with
   the maximum on-time as the reason.
+- *Operator:* the relay output's LED lights on `relay on` and goes out when the fail-safe trips.
 - *Operator:* WC Speaker's device page in HA has Fan and Restart.
   - Fan follows `relay on`.
-  - Switching Fan in HA shows in the log.
+  - Switching Fan in HA shows in the log and on the LED.
   - Restart reboots the board.
 
-Done when: the gates are green, the serial log shows the relay turning itself off after 1 minute,
-and HA shows the switch going off.
+Done when:
+
+- the gates are green;
+- the serial log shows the relay turning itself off after 1 minute;
+- HA shows the switch going off, and the LED goes out;
+- the design documents carry the corrections above.
 
 ### P2. Motion
 
@@ -234,7 +285,7 @@ Builds:
   - `ToneSource`: sine bursts as a local source, for the console and Identify.
 - `esp-libs/esp-audio-support/test/`: a GoogleTest build on the pattern of this repo's
   `test/CMakeLists.txt`, with the check on pure includes. This repo's `.kubecoder/project.yaml`
-  gains a test step that runs it (question 3).
+  gains a test step that runs it, as settled.
 
 Host tests:
 
@@ -288,7 +339,7 @@ Bench check:
 
 Done when: the gates are green, and the operator has heard the tone at two volumes and Identify.
 
-### P6. The stream: UDP in and the advertised endpoint (changes esp-libs)
+### P6. The stream: UDP in and the advertisement (changes esp-libs; closes TA-1)
 
 Builds:
 
@@ -300,9 +351,14 @@ Builds:
     receiver starts. HLD §5 puts this in the extraction, and esp-network-support has no setting
     for it.
 - In this repo:
-  - `on_create_configuration` adds `endpoint` (`ip:port`) and `audio_formats.out`: `mono`, the
-    sample rate, and a `bit_rate` of 16, which means bits per sample. There is no `in`. Intercom's
-    `main/Application.cpp` has the shape.
+  - `on_create_configuration` adds these fields, in the shape of Intercom's `main/Application.cpp`:
+    - `endpoint` (`ip:port`);
+    - `audio_formats.out`: `mono`, a `sample_rate` of 48000, and a `bit_rate` of 16, which means
+      bits per sample;
+    - `"capabilities": ["pa"]`, hard-coded with no setting. This is TA-1's firmware half, and it
+      puts the device on the doorbell once IntercomServer decides by capability (ICOMSRV-8).
+
+    There is no `in`.
   - The top `CMakeLists.txt` reads the component's `sdkconfig.defaults`.
   - The console gets `audio`, which prints the counters and how full the buffer is.
 - `tools/send-audio.py`, on the Python standard library only:
@@ -317,7 +373,7 @@ Bench check:
 - The pod reaches the board. Witnessed on 2026-11-27: `ping 10.1.1.20` from the pod, with 0 % loss
   at 67–111 ms. That proves the route for HLD Q6, and the stream below proves UDP. After this phase
   the round trip falls to a few ms, which shows that power save is off.
-- The log shows the advertised endpoint and format.
+- The log shows the advertised endpoint, format and capabilities.
 - `send-audio.py --host 10.1.1.20 --drop 0.01`:
   - the log shows a stream started;
   - `audio` shows gaps filled to match the drops, and no underruns;
@@ -333,7 +389,8 @@ Done when:
 - the gates are green;
 - a 5-minute stream with 1 % loss plays with no underrun;
 - the operator has heard it;
-- the PIR count during streaming is recorded.
+- the PIR count during streaming is recorded;
+- the configuration carries `capabilities`, which closes TA-1.
 
 ### P7. The first OTA (no code)
 
@@ -352,26 +409,5 @@ After this plan, outside the firmware:
 
 ## Questions for the operator
 
-1. **Build audio last, reversing the design's order of work?** I recommend yes, for the reasons in
-   the recommendation.
-
-   Record: HLD §11 makes audio step 3, before motion and the fan.
-2. **Play ambient sound at 48 kHz mono 16-bit?** I recommend yes, which is the design's own lean
-   (HLD Q2). It costs about 770 kbit/s, 65 packets/s and 96 KB of buffer per second. Changing it
-   later is one constant, because IntercomServer converts to whatever the device advertises.
-
-   Record: none, because HLD Q2 is open.
-3. **Run `esp-audio-support`'s host tests from this repo's `kc project test`?** esp-libs has no
-   gates, no CI and no tests of its own. I recommend yes, and Intercom's gate adds the same step
-   when it migrates. The alternative, gates and a Jenkins job for esp-libs itself, is a project of
-   its own.
-
-   Record: HLD §9, "esp-audio-support carries its own host tests for the mixer", holds. It does not
-   say who runs them.
-4. **Is R2 fitted on the bench board?** The schematic gained a 10 kΩ pull-down on the relay at
-   `744a522`. HLD §2 and the bring-up doc still say nothing holds the relay off during reset. I
-   recommend that P1 corrects both docs. If R2 is fitted, P1's bench check also watches the relay
-   through a reset.
-
-   Record: HLD §2, "Nothing holds the relay off during reset", and `docs/hardware-bring-up.md`,
-   "Open hardware point: the relay during reset".
+None open. The operator answered the first four on 2026-11-27, and they are under Settled
+above and in P1.
