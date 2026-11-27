@@ -131,7 +131,25 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
   96 KB per second. It can live in PSRAM if internal RAM gets tight. The prebuffer IntercomServer
   keeps ahead of real time (500 ms) sits on top of the 200 ms lead, so the depth must hold both
   and some jitter. The default depth is 1 s.
-- **WiFi modem power save off.** This is Intercom's H1 finding.
+- **WiFi modem power save off.** This is Intercom's H1 finding. The player turns it off when it
+  opens the port, and it stays off. With it on, the access point holds the device's packets until
+  the next beacon. On the bench the ping from the pod fell from 17–108 ms (58 ms on average) to
+  2–5 ms once it was off.
+- **The receiver.** `UDPReceiver` reads the port on its own task, above the output's priority, and
+  lwIP queues 32 datagrams rather than 6. This is Intercom's H5 finding. The port opens once the
+  network is up, just after the device configuration has loaded, because `audioUdpPort` comes with
+  it. A stream's first packet starts playback. Each sender, by its address and port, is a source of
+  its own.
+- **IPv4 reassembly on.** A KubeCoder pod's MTU is 1430, so a 1472-byte datagram from there comes
+  in two fragments, and lwIP drops fragments unless it reassembles them.
+- **Packets of one length.** A lost or late packet's place is the stream's mean packet, and a late
+  packet longer than that place is cut to it. With packets of one length the place is exact.
+  - IntercomServer's streaming today fills each packet to 1468 bytes first, so 20 ms at 48 kHz
+    goes out as 1468 and 452 bytes.
+  - From the pod, most of the short packets came before the long one sent ahead of them. Each long
+    packet then lost a third of itself, and the stream ran dry every half second.
+  - Two packets of 960 bytes for each 20 ms arrived in order, and `tools/send-audio.py` sends
+    those.
 - **The left I2S slot.** The amp plays the left channel only, so the mono stream goes out in the
   left slot.
 - **Config struct, not `board_config.h` macros.** It carries the pins, the I2S port, the format,
@@ -164,6 +182,16 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
 `audio_formats.out` (`channel_layout`, `sample_rate`, `bit_rate`) and `capabilities`, in
 Intercom's shape, through esp-mqtt-support's `on_create_configuration`, under
 `CONFIG_MQTT_TOPIC_PREFIX="toilet_automation"`.
+
+- **`endpoint` is the device's IP address and its `audioUdpPort`.** The port is open by the time
+  MQTT connects and the configuration goes out. The boot log shows the three fields as they are
+  published:
+
+  ```
+  Audio: Advertising endpoint "10.1.1.20:11106", audio_formats {"out":{"channel_layout":"mono","sample_rate":48000,"bit_rate":16}}, capabilities ["pa"]
+  ```
+
+- **`bit_rate` is the bits per sample**, 16, as Intercom has it.
 
 - **`"capabilities": ["pa"]` is hard-coded, with no setting.** `pa` puts the device on
   IntercomServer's doorbell and other broadcasts. Without `intercom`, the device gets no calls or
@@ -290,10 +318,11 @@ The agent-driven layer needs two things built into the firmware:
   force the relay, play a test tone, set the volume, play Identify, and print audio counters
   (packets, gaps filled, underruns).
   The agent then exercises the whole path on the device without touching it.
-- **A test audio sender.** `tools/send-audio.py` streams a WAV file in the UDP format. Whether the
-  pod can reach the device on the LAN is open (Q6). Without that, the agent verifies the audio
-  path with the test tone and counters, and the operator verifies the sound. Once IntercomServer
-  plays ambient sound, it is the end-to-end sender from production.
+- **A test audio sender.** `tools/send-audio.py` streams a mono 16-bit 48 kHz WAV, or generated
+  held chords, in the UDP format, paced as IntercomServer paces its stream. `--drop` and
+  `--reorder` exercise the gap fill. It runs from the pod, which reaches the device on the LAN
+  (Q6). The agent reads the counters through the console's `audio`, and the operator judges the
+  sound. Once IntercomServer plays ambient sound, it is the end-to-end sender from production.
 
 A green gate proves the build and the logic, never the behaviour on the device.
 
@@ -316,9 +345,9 @@ replaced by the MDM version on its next boot, unless the bench device's configur
 - **Q4. Board variant.** Settled: the FH4R2, read from the board's eFuses
   ([hardware-bring-up.md](hardware-bring-up.md)).
 - **Q5. Relay and fan.** The relay is the G5Q-1A. The fan's rating is still open.
-- **Q6. Can a KubeCoder pod reach the device's LAN?** It matters for the test audio sender and for
-  any OTA-from-the-pod variant of the bench. The production IntercomServer already reaches the
-  LAN.
+- **Q6. Can a KubeCoder pod reach the device's LAN?** Settled: yes. The pod pings the bench board
+  at 10.1.1.20, and `tools/send-audio.py` streams to it over UDP. The device sees the pod as its
+  node's address, `10.1.3.5`, with the port translated. The pod's MTU is 1430 (§5).
 
 ## 11. Order of work
 
