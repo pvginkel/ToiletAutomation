@@ -1,0 +1,7 @@
+CONFIG_IDF_TARGET="esp32s3"
+# The bench drives the console, so USB-Serial-JTAG must be the primary console (it takes input).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Report the PSRAM if the module has quad PSRAM (FH4R2); boot on regardless.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
