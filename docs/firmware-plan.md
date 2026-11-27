@@ -23,7 +23,18 @@ when an operator check comes back.
     PIR powered, so a power-on trigger is untested.
   - Thirty minutes with the PIR covered, on Wi-Fi, from 14:10 to 14:40 UTC: no edges, so no
     false triggers. The defaults stand. Recorded in `docs/hardware-bring-up.md` and HLD §6.
-- **P3: in progress** (SGP40 and VOC index, esp-libs and firmware).
+- **P3: built** on 2026-11-27; **the operator's two checks are owed.**
+  - esp-libs: 3774d6f and f2c3f71. esp-sensor-support's `SGP40` on `i2c_master`, and Sensirion's
+    gas index algorithm vendored unchanged with its licence and wrapped as `VOCIndex`. It builds
+    without `-Wconversion` warnings as it is.
+  - Firmware: 4cf3ea7 and 4b0757c. `VocGate` with its host tests, `AirSensor`'s 1 Hz task, HA's
+    `voc_index` sensor (null, so unknown, in the blackout), and the console's `voc` and
+    `voc inject <index>|off`.
+  - The bench check passed: serial `0x0000057f63a1` and the self-test passing at boot, the first
+    index 48 s after boot, and `voc inject 250` then `voc inject off` in the log. The first index
+    is 1, and the algorithm's low-pass takes it to about 90 over the next two minutes.
+  - Owed by the operator: HA's VOC index showing 250 under `voc inject 250`, and isopropyl
+    alcohol held near the sensor driving the index well above 100 within a minute.
 - **P4 to P7: not started.**
 
 ## The order
