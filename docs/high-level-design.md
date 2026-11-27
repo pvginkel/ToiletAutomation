@@ -127,9 +127,10 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
   in either direction, starts a new stream instead of being filled. IntercomServer's counter
   restarts at zero when the server restarts, and filling that jump would play minutes of
   silence.
-- **A deeper buffer.** Music is not latency-sensitive. 500 ms to 1 s is cheap: 48 kHz mono is
-  96 KB per second. It can live in PSRAM if internal RAM gets tight. The buffer holds at least
-  IntercomServer's prebuffer (500 ms), which the server keeps ahead of real time.
+- **A deeper buffer.** Music is not latency-sensitive, and a second is cheap: 48 kHz mono is
+  96 KB per second. It can live in PSRAM if internal RAM gets tight. The prebuffer IntercomServer
+  keeps ahead of real time (500 ms) sits on top of the 200 ms lead, so the depth must hold both
+  and some jitter. The default depth is 1 s.
 - **WiFi modem power save off.** This is Intercom's H1 finding.
 - **The left I2S slot.** The amp plays the left channel only, so the mono stream goes out in the
   left slot.

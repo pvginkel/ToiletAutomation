@@ -45,7 +45,19 @@ when an operator check comes back.
   - The operator saw HA's VOC index show 250 under `voc inject 250`.
   - Isopropyl alcohol at 15:33 UTC took the index from 105 to 249 within 10 s, 406 within 30 s,
     and a peak of 496, where it held for minutes.
-- **P4: in progress** (`esp-audio-support`'s stream buffer, esp-libs and this repo's test gate).
+- **P4: done** on 2026-11-27.
+  - esp-libs: 862de7b and 81bc791. `esp-audio-support` with its pure core: `StreamBuffer`
+    (placement by counter, gaps as silence, a new stream on a jump past the depth, several
+    sources mixed), `Gain`, `AutoVolume` and `ToneSource`, and 38 host tests.
+  - Firmware: c06d105 adds the component's tests to `kc project test`, which is green, as is
+    `kc project lint`.
+  - Defaults: a 200 ms lead, a 1 s depth and a 500 ms grace before a dry stream ends. Gain is
+    linear in dB from -40 to 0 dB, so a volume of 0.5 is -20 dB. The caller allocates the ring,
+    so P5 picks PSRAM or internal RAM.
+  - The depth must hold the lead and IntercomServer's 500 ms prebuffer on top of it, plus
+    jitter, not just the prebuffer. HLD §5 now says so.
+  - Today's IntercomServer splits each 20 ms at 48 kHz into a 1468- and a 452-byte packet, so
+    a lost packet's length is estimated from the stream's mean.
 - **P5 to P7: not started.**
 
 ## The order
