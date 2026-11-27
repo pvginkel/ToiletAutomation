@@ -59,7 +59,8 @@ when an operator check comes back.
     jitter, not just the prebuffer. HLD §5 now says so.
   - Today's IntercomServer splits each 20 ms at 48 kHz into a 1468- and a 452-byte packet, so
     a lost packet's length is estimated from the stream's mean.
-- **P5: done** on 2026-11-27.
+- **P5: done** on 2026-11-27. Pushed at da20364 with esp-libs 8420e0d, built green as
+  Firmware/ToiletAutomation #7.
   - esp-libs: 8420e0d (`I2SOutput` and `AudioPlayer`) and 774687d (esp-mqtt-support logged a
     bad button payload through `%s` with a `std::string`).
   - Firmware: f511edf with `test/VolumeTest.cpp`, and 5864570 for HLD §5 and §9. The console
