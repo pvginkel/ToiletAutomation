@@ -2,12 +2,10 @@
 # sound, motion, air quality and fan relay, and the hardware test app in hwtest/.
 
 repos:
-  # The shared ESP-IDF component library. main/idf_component.yml declares ../../esp-libs/<component>
+  # The ESP-IDF component library. main/idf_component.yml declares ../../esp-libs/<component>
   # path dependencies and the top-level CMakeLists.txt reads their sdkconfig.defaults, so the
-  # checkout has to sit beside this repo, the layout the Jenkinsfile arranges too. Shared: the
-  # esp-audio-support extraction writes into it from here.
+  # checkout has to sit beside this repo, the layout the Jenkinsfile arranges too.
   - url: https://github.com/pvginkel/esp-libs
-    shared: true
 
 services:
   # The bench: flashes the board on the operator's desk and logs its serial port.
