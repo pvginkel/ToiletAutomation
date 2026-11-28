@@ -76,11 +76,11 @@ when an operator check comes back.
   - The speaker crackled above 0.7, which was -12 dB. So 1ed4092 caps the volume at -12 dB with
     `SPEAKER_MAX_DB` in `BoardConfig.h`, and a volume of 1 is now -12 dB. The operator heard
     Identify at 1.0 play clean. NVS holds 1.0.
-- **P6: in progress** (UDP in and the advertisement). Built, waiting on the operator's checks
-  and a ruling on the sender's packet split.
+- **P6: done** on 2026-11-28 (UDP in and the advertisement). Closes TA-1.
   - esp-libs: f77b4ad (`UDPReceiver`, `AudioPlayer::listen(port)`, IPv4 reassembly).
   - Firmware: ee9e7bd (the receiver, the advertisement and `audio`), 6bc5621
-    (`tools/send-audio.py`), 6015141 (HLD §5 and §9, Q6 settled).
+    (`tools/send-audio.py`), 6015141 (HLD §5 and §9, Q6 settled), a88dd9f (the packet cut in
+    ambient-sound-design §3.5), 6d4ed3c (the console's `i2s drive` and `wifi txpower`).
   - Ping from the pod: 58 ms average before, 2.7 ms after, so power save is off.
   - The log shows the endpoint `10.1.1.20:11106`, `audio_formats.out` mono at 48000 and 16, and
     `capabilities ["pa"]`.
@@ -89,25 +89,21 @@ when an operator check comes back.
     RAM: 160,895 B free before a stream, 153,571 B at the lowest during one.
   - The pod's MTU is 1430, so a 1472-byte datagram arrives in two fragments. lwIP dropped them
     until IPv4 reassembly went on.
-  - IntercomServer's split of 20 ms into 1468 and 452 bytes of PCM breaks playback from the
-    pod. The long packet, fragmented, arrives after the short one, and `StreamBuffer` cuts a
-    late packet to the mean length, so the stream runs dry every ~400 ms. Two equal 960-byte
-    packets play clean. `send-audio.py` splits equally; `--split greedy` reproduces the server.
-  - **Resume here.** Not pushed: esp-libs f77b4ad and this repo from ee9e7bd on. The board runs
-    6015141. Waiting on the operator for:
-    - the ruling on the split. Recommended: IntercomServer sends equal packets, 960 bytes of
-      PCM (10 ms) each, which fit the pod's MTU whole. Then ambient-sound-design §3.5's "Payloads
-      are 1468 bytes" changes to match, and ICOMSRV-7 (the ambient player slice) gets a comment.
-      The alternative, `StreamBuffer` holding a late packet until its place is known, reworks
-      P4's core;
-    - the listen, with no drops:
-      `python3 tools/send-audio.py --host 10.1.1.20 --test-signal 300`;
-    - the PIR count, with the PIR under a cup for 10 minutes during
-      `python3 tools/send-audio.py --host 10.1.1.20 --test-signal 600`, counting edges with
-      `motion` before and after.
-  - Then: record the results here, push esp-libs before this repo, track the build, close TA-1
-    (the configuration carries `capabilities`), and start P7, which needs the operator in IoT
-    Support.
+  - The packet cut. IntercomServer's 1468 + 452 split of each 20 ms broke playback from the pod:
+    the long packet, fragmented, came after the short one and was cut to the mean. The operator
+    ruled equal packets on 2026-11-28, two of 960 bytes at 48 kHz, in the ambient project's
+    inbox/74 (D1). Pilot confirmed IntercomServer's slice 4 builds that cut and matches the
+    firmware on the counter, the PCM and the advertisement. Until slice 4 ships, the server
+    still sends 1468 + 452. Its counter restarts at 0 with the server, which the firmware takes
+    as a new stream.
+  - The bench speaker crackled during a stream, from the board's wiring and its USB supply, not
+    the data. `docs/hardware-bring-up.md` has the tests. On a bench supply with short I2S wires
+    and a ground beside them, it plays clean. Identify still crackles above a volume of 0.8, so
+    the -12 dB cap stays until a soldered board.
+  - The operator heard 10 minutes of the test chords play clean, from 12:05:52 to 12:15:52 UTC:
+    60,000 packets, 0 gaps, 0 underruns.
+  - The PIR, under a cup through those 10 minutes: 48 edges before and 48 after, so no false
+    triggers while streaming.
 - **P7: not started.**
 
 ## The order

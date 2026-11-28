@@ -90,6 +90,23 @@ format, using sine tones.
   from the datasheet, not measured. A tone at 20 % of full scale was clearly audible.
 - **The loudest it takes.** Under the firmware, with Identify's 880 Hz beeps at full scale, the
   operator heard crackling above -12 dB and none at -12 dB or below.
+- **Crackle under Wi-Fi traffic (2026-11-28, P6).** With a stream running, the speaker crackled,
+  and so did Identify's beeps mixed into it. With no stream, the same beeps played clean.
+  - Not the audio data. The board logged no gaps and no underruns. A 440 Hz tone crackled over
+    a stream of pure silence, and worse during a flood of the same packet rate to another
+    port, which never reaches the audio path. Silence never crackled: only a signal did.
+  - The supply was part of it. The board ran on the PC's USB 5 V. On a Voltcraft LPS 1305 at
+    5 V, on the board's 5 V pin and the amp's, with the USB's 5 V cut, the crackle fell to
+    about a fifth. A bulk capacitor at the amp changed nothing after that.
+  - The wiring was the rest. The I2S wires looped 30–40 cm around the breadboard between modules
+    10 cm apart, with no ground beside them. Short wires, a ground wire beside them and the
+    bundle tie-wrapped took the crackle away, flood included.
+  - It is not gone at every level. After the rewire, Identify still crackles above a volume of
+    0.8 (-17.6 dB). The operator expects soldered tracks to cure that. The -12 dB cap stays
+    until a soldered board is tested.
+  - The console has `i2s drive [0-3]` and `wifi txpower [dBm]` for the next board. Neither is
+    persisted. The I2S pins boot at drive 2 for DIN and 1 for BCLK and LRC, and the TX power at
+    20 dBm. Intercom's V1 board capped it at 11 dBm against the same kind of interference.
 
 ### The relay
 
@@ -123,6 +140,8 @@ proves nothing.
   pulse after a power-up or reset, as the trigger at boot in the PIR section describes. A pulse
   that rises inside those 10 s is never accepted, even if it is still high when they end.
 - **The volume tops out at -12 dB.** Louder crackles, so a volume of 1 is -12 dB.
+- **The I2S lines are short, with ground beside them.** Long loose wires crackled under Wi-Fi
+  traffic. The final board keeps BCLK, LRC and DIN short over ground, and the amp on a clean 5 V.
 - **The VOC index waits out the warm-up.** The raw signal drifts for minutes after power-up.
 - **The console works as the design wants.** USB-Serial-JTAG as the primary console, driven by
   the bench, is what the design's test hooks rely on.
