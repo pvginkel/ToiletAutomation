@@ -150,6 +150,8 @@ parameter, never from `esp_timer`. The test build fails on an ESP-IDF include.
     packet then lost a third of itself, and the stream ran dry every half second.
   - Two packets of 960 bytes for each 20 ms arrived in order, and `tools/send-audio.py` sends
     those.
+  - The operator ruled on 2026-11-28 that IntercomServer cuts equal packets
+    (ambient-sound-design §3.5). Its ambient player's slice builds that cut.
 - **The left I2S slot.** The amp plays the left channel only, so the mono stream goes out in the
   left slot.
 - **Config struct, not `board_config.h` macros.** It carries the pins, the I2S port, the format,

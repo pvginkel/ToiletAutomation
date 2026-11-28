@@ -195,8 +195,8 @@ player fades out over half a second and ends. The device plays out its buffer an
 runs dry.
 
 **The wire.** The format is unchanged: a 4-byte big-endian sequence counter, then raw PCM.
-Payloads are 1468 bytes. The counter is now per device, and it runs on across playbacks while
-the server runs.
+Each 20 ms of audio to a device goes as equal packets of at most 1468 bytes: two of 960 at
+48 kHz. The counter is now per device, and it runs on across playbacks while the server runs.
 
 **Pacing.** This is today's `AudioStreaming`: 20 ms chunks timed against a stopwatch started
 with the stream, and a reset after a stall of more than 60 ms. One thing is added: the first
