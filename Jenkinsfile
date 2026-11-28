@@ -38,7 +38,8 @@ pipeline {
                 }
                 dir('esp-libs') {
                     git url: 'https://github.com/pvginkel/esp-libs.git', branch: 'main',
-                        credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10'
+                        credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                        changelog: false, poll: false
                 }
             }
         }
