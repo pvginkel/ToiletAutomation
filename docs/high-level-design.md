@@ -331,7 +331,9 @@ A green gate proves the build and the logic, never the behaviour on the device.
 **Bench caveat.** esp-mdm checks for OTA on every boot. It installs the model's current version
 whenever that differs from the running one. A dev build flashed through the bench is therefore
 replaced by the MDM version on its next boot, unless the bench device's configuration has
-`enableOTA: false`. The remote-flashing design treats this as a decision (its D7).
+`enableOTA: false`. The remote-flashing design treats this as a decision (its D7). IoT Support
+restarts a device whose configuration changes, so turning Enable OTA on installs the release at
+once.
 
 ## 10. Open questions
 
@@ -367,6 +369,6 @@ the audio last.
 5. **The SGP40 and the VOC index** (P3).
 6. **`esp-audio-support`.** The extraction, playback, the advertised endpoint, format and
    capabilities, and the test tone and sender (P4 to P6).
-7. **The first OTA** through IoT Support (P7).
+7. **The first OTA** through IoT Support (P7). Done on 2026-11-28.
 8. **The HA automations.** Occupancy, the fan and the ambient sound, once IntercomServer plays
    ([ambient-sound-design.md](ambient-sound-design.md)).
