@@ -104,7 +104,12 @@ when an operator check comes back.
     60,000 packets, 0 gaps, 0 underruns.
   - The PIR, under a cup through those 10 minutes: 48 edges before and 48 after, so no false
     triggers while streaming.
-- **P7: not started.**
+- **P7: next.** Resume here.
+  - Firmware/ToiletAutomation was building 2297b2f, P6's push, which uploads the release P7
+    installs. Check it went green: `track_build.py Firmware/ToiletAutomation --hash 2297b2f`.
+  - Then the operator turns Enable OTA on for WC Speaker, and the steps below follow.
+  - This Status update is committed after 2297b2f and not pushed, so no newer release lands
+    before P7. Push it after P7, with P7's results.
 
 ## The order
 
