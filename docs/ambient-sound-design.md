@@ -162,8 +162,9 @@ A visit, end to end:
   characters, with none of `/ \ : * ? " < > |`, no control characters, and no leading or
   trailing space or dot.
 - **Upload.** The file is written under `.incoming`, then probed with `ffprobe`. It must have an
-  audio stream, last at most 15 minutes and be at most 50 MB (both are settings). It is then
-  renamed into `enabled/`, so a half-written upload is never a track.
+  audio stream, last at most 15 minutes and be at most 50 MiB (52,428,800 bytes). Both limits are
+  settings, and both are inclusive. The file is then renamed into `enabled/`, so a half-written
+  upload is never a track.
 - **Rename** is a rename in its folder. **Enable and disable** move the file between the folders.
   **Delete** removes it. All of them run under one lock.
 - **Duration.** It comes from `ffprobe`, cached in memory by path and modification time.
@@ -262,8 +263,8 @@ by its device id.
 | Method | Path | Caller | What |
 |---|---|---|---|
 | GET | `/api/ambient-tracks` | app | name, enabled, duration; sorted by name |
-| POST | `/api/ambient-tracks` | app | upload: `file`, `name`; 201 with the track |
-| PATCH | `/api/ambient-tracks/{name}` | app | `name`, `enabled` |
+| POST | `/api/ambient-tracks` | app | upload: a form of `name`, then `file`; 201 with the track |
+| PATCH | `/api/ambient-tracks/{name}` | app | `name`, `enabled`, or both; 200 with the track |
 | DELETE | `/api/ambient-tracks/{name}` | app | 204 |
 | GET | `/api/ambient-tracks/{name}/audio` | app | the file; `Range` gives 206 |
 | GET | `/api/devices` | tests, by hand | devices: kind, online, format, what is playing |
@@ -273,9 +274,14 @@ by its device id.
 | GET | `/updates?action=version` | app, no auth | the highest version code as text, or an empty body |
 | GET | `/updates?action=download` | app, no auth | that APK |
 
+A track is answered as `{"name":"Rain on the skylight","enabled":true,"duration":134.2}`. The
+`duration` is its length in seconds, as a JSON number.
+
 The errors:
 
-- 400 for a file that is not audio, or a name that breaks the rules;
+- 400 for a file that is not audio, a name that breaks the rules, a change that is not a JSON
+  object of `name`, `enabled` or both, or an upload whose parts are not `name`, then `file`: any
+  other order answers "An upload is a multipart form of name, then file.";
 - 401 and 403 for a missing token or role;
 - 404 for an unknown track or device;
 - 409 for a name already taken, a start with no enabled track, or an offline device;
@@ -297,13 +303,16 @@ still update itself out of the problem.
 - `Devices:TopicPrefixes` (§3.2, §3.6).
 - The loudness target (−20 LUFS), the fades (0.5 s), the prebuffer (500 ms) and the cap
   (30 min).
-- The upload limits (15 min, 50 MB).
-- The Keycloak authority and audience.
+- The upload limits: `TRACK_MAX_SECONDS` (900) and `TRACK_MAX_BYTES` (52,428,800, 50 MiB).
+- The Keycloak issuer and audience: `KEYCLOAK_ISSUER` is required and must be an HTTPS URL, and
+  `KEYCLOAK_AUDIENCE` is `intercom-server` unless set.
 
 ### 3.10 Deployment, in IntercomDeploy
 
 - **The image** is `dotnet/aspnet:9.0` with `ffmpeg` from apt.
-- **The ingress** is `intercom.home`, internal, with a step-ca certificate (decision 10).
+- **The HTTP route.** There is no Kubernetes Ingress. IntercomDeploy's ClusterIP Service
+  `intercom-http` publishes the server's port on 80, and the shared nginx serves it from the
+  Service's annotations as `intercom.home`, internal, with a step-ca certificate (decision 10).
 - **Keycloak.** IntercomDeploy's Terraform already declares the Keycloak provider. It takes
   IotDeploy's `keycloak-client` module and three clients:
   - `intercom-server` holds the client roles `user` and `pipeline`, and is the audience the
