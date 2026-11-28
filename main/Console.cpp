@@ -1,6 +1,7 @@
 #include "Console.h"
 
 #include <cinttypes>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -9,9 +10,11 @@
 #include <optional>
 
 #include "Signal.h"
+#include "board/BoardConfig.h"
 #include "esp_app_desc.h"
 #include "esp_console.h"
 #include "esp_heap_caps.h"
+#include "esp_wifi.h"
 #include "support.h"
 
 LOG_TAG(Console);
@@ -38,8 +41,18 @@ static constexpr long TONE_MIN_HZ = 20;
 static constexpr long TONE_MAX_HZ = 20000;
 static constexpr long TONE_MAX_MS = 30000;
 
+// wifi txpower's range: esp_wifi_set_max_tx_power's, which takes units of 0.25 dBm.
+static constexpr double TX_POWER_MIN_DBM = 2.0;
+static constexpr double TX_POWER_MAX_DBM = 20.0;
+
 static esp_err_t add_command(const char* name, const char* help, esp_console_cmd_func_t func) {
     const esp_console_cmd_t command = {.command = name, .help = help, .func = func};
+
+    return esp_console_cmd_register(&command);
+}
+
+static esp_err_t add_command(const char* name, const char* hint, const char* help, esp_console_cmd_func_t func) {
+    const esp_console_cmd_t command = {.command = name, .help = help, .hint = hint, .func = func};
 
     return esp_console_cmd_register(&command);
 }
@@ -418,6 +431,99 @@ static int identify_command(void* context, int argc, char** argv) {
     return 0;
 }
 
+// The speaker's pins, for i2s drive.
+static constexpr struct {
+    const char* name;
+    gpio_num_t gpio;
+} SPEAKER_PINS[] = {
+    {"DIN", SPEAKER_GPIO_DATA},
+    {"BCLK", SPEAKER_GPIO_SCK},
+    {"LRC", SPEAKER_GPIO_WS},
+};
+
+// i2s drive [0-3]: prints the drive capability of the speaker's pins, after setting all three when
+// asked to. A diagnostic for the crackle: the setting is not kept, so a reboot restores the default.
+// It touches no app state, so it runs on the console's task.
+static int i2s_command(int argc, char** argv) {
+    std::optional<long> drive;
+    if (argc >= 2 && argc <= 3 && strcmp(argv[1], "drive") == 0) {
+        if (argc == 3) {
+            drive = parse_long(argv[2], GPIO_DRIVE_CAP_0, GPIO_DRIVE_CAP_3);
+            if (!drive.has_value()) {
+                printf("The drive is 0 to 3\n");
+                return 1;
+            }
+        }
+    } else {
+        printf("Usage: i2s drive [0-3]\n");
+        return 1;
+    }
+
+    if (drive.has_value()) {
+        for (const auto& pin : SPEAKER_PINS) {
+            const auto err = gpio_set_drive_capability(pin.gpio, (gpio_drive_cap_t)*drive);
+            if (err != ESP_OK) {
+                printf("Could not set GPIO %d's drive: %s\n", (int)pin.gpio, esp_err_to_name(err));
+                return 1;
+            }
+        }
+    }
+
+    static constexpr const char* NOMINAL[] = {"~5 mA", "~10 mA", "~20 mA", "~40 mA"};
+
+    for (const auto& pin : SPEAKER_PINS) {
+        gpio_drive_cap_t cap;
+        const auto err = gpio_get_drive_capability(pin.gpio, &cap);
+        if (err != ESP_OK) {
+            printf("Could not read GPIO %d's drive: %s\n", (int)pin.gpio, esp_err_to_name(err));
+            return 1;
+        }
+        printf("%s (GPIO %d): drive %d, %s\n", pin.name, (int)pin.gpio, (int)cap,
+               cap >= 0 && cap < GPIO_DRIVE_CAP_MAX ? NOMINAL[cap] : "unknown");
+    }
+
+    return 0;
+}
+
+// wifi txpower [dBm]: prints Wi-Fi's maximum transmit power, after setting it when asked to. A
+// diagnostic for the crackle: the setting is not kept, so a reboot restores the configured one. It
+// touches no app state, so it runs on the console's task.
+static int wifi_command(int argc, char** argv) {
+    std::optional<double> dbm;
+    if (argc >= 2 && argc <= 3 && strcmp(argv[1], "txpower") == 0) {
+        if (argc == 3) {
+            char* end;
+            dbm = strtod(argv[2], &end);
+            if (*end || end == argv[2] || !(*dbm >= TX_POWER_MIN_DBM && *dbm <= TX_POWER_MAX_DBM)) {
+                printf("The TX power is %.0f to %.0f dBm\n", TX_POWER_MIN_DBM, TX_POWER_MAX_DBM);
+                return 1;
+            }
+        }
+    } else {
+        printf("Usage: wifi txpower [dBm]\n");
+        return 1;
+    }
+
+    if (dbm.has_value()) {
+        const auto err = esp_wifi_set_max_tx_power((int8_t)std::lround(*dbm * 4));
+        if (err != ESP_OK) {
+            printf("Could not set the TX power: %s\n", esp_err_to_name(err));
+            return 1;
+        }
+    }
+
+    int8_t power;
+    const auto err = esp_wifi_get_max_tx_power(&power);
+    if (err != ESP_OK) {
+        printf("Could not read the TX power: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    printf("Wi-Fi TX power at most %.2f dBm (%d quarter dBm)\n", power / 4.0, (int)power);
+
+    return 0;
+}
+
 esp_err_t Console::begin() {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = PROMPT;
@@ -460,6 +566,16 @@ esp_err_t Console::begin() {
                                  "Print whether the speaker plays, how much the stream buffer holds, and the "
                                  "stream's, the output's and the UDP receiver's counters since boot",
                                  audio_command, _application));
+
+    // Diagnostics for the speaker's crackle under Wi-Fi traffic. Neither is kept: a reboot restores
+    // the defaults.
+    ESP_ERROR_RETURN(add_command("i2s", "drive [0-3]",
+                                 "Print the drive capability of the speaker's DIN, BCLK and LRC pins. With a "
+                                 "value, first set all three: 0 ~5 mA, 1 ~10 mA, 2 ~20 mA, 3 ~40 mA. Not kept",
+                                 i2s_command));
+    ESP_ERROR_RETURN(add_command("wifi", "txpower [dBm]",
+                                 "Print Wi-Fi's maximum TX power. With a value, 2 to 20 dBm, first set it. Not kept",
+                                 wifi_command));
 
     ESP_ERROR_RETURN(esp_console_start_repl(repl));
 
