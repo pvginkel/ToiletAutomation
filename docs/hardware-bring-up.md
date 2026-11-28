@@ -82,6 +82,9 @@ Its output reaches GPIO1 and moves with motion. The operator saw the log follow 
 The I2S output plays on the speaker. It was tested with 16-bit stereo at 48 kHz in Philips
 format, using sine tones.
 
+- **The speaker is a Visaton FR 7**, the one in the intercoms. On 2026-11-28 the operator played
+  the same ambient tracks on it and on a Visaton BF 32, a 32 mm full-range rated 150 Hz to
+  20 kHz, and kept the FR 7 as the better all-round speaker.
 - **Channel test with SD floating.** A tone on both channels was loud. A tone on the left only or
   the right only was quieter. The amp was mixing the two channels, (L+R)/2.
 - **Channel test with SD tied to 3V3.** Both channels and left only were loud. Right only was
