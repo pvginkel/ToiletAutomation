@@ -14,8 +14,8 @@ is in [high-level-design.md](high-level-design.md), and this design answers that
 question of what sends the music.
 
 Status: settled, 2026-11-22, with no open questions. It replaces the first draft of the same
-day, which had a separate Python server (ToiletAutomationServer) and its own app. Nothing is
-built yet.
+day, which had a separate Python server (ToiletAutomationServer) and its own app. Built so far:
+the track API, sign-in, the update channel and IntercomClient. The ambient player is next.
 
 ## 1. The decisions
 
@@ -294,12 +294,14 @@ still update itself out of the problem.
 
 - **Publish.** `POST /api/app-releases` writes the APK to `/data/updates/<version_code>.apk`, by
   a temporary file and a rename. A version code that is already there gets a 409. The newest
-  three are kept and older ones deleted.
+  three are kept and older ones deleted. The route takes a request of at most 128 MiB.
 - **Serve.** `/updates?action=version` answers the highest version code, and `action=download`
   serves that file.
 
 ### 3.9 Settings
 
+- `HTTP_PORT` (8080), the web host's port, and `DATA_DIR` (`data`), which holds the tracks under
+  `ambient/` and the app releases under `updates/`.
 - `Devices:TopicPrefixes` (§3.2, §3.6).
 - The loudness target (−20 LUFS), the fades (0.5 s), the prebuffer (500 ms) and the cap
   (30 min).
